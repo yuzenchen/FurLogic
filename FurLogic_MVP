@@ -1,0 +1,503 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Utensils, Activity, AlertTriangle, Check, X, ChevronRight, Info, ChefHat, Settings, Save, ArrowLeft } from 'lucide-react';
+
+// --- 1. 核心資料庫 (模擬後端 DB) ---
+// 這裡加入了鈣(mg)與磷(mg)數據，這是計算營養均衡的關鍵
+const INITIAL_DB = [
+  { id: 1, name: '雞胸肉', type: 'protein', safety: 'safe', calories: 105, protein: 23, fat: 1, ca: 5, p: 200, desc: '低脂優質蛋白，鮮食基底。', warning: null },
+  { id: 2, name: '雞腿肉', type: 'protein', safety: 'safe', calories: 150, protein: 18, fat: 8, ca: 8, p: 180, desc: '適口性佳，脂肪含量稍高。', warning: null },
+  { id: 3, name: '南瓜', type: 'veg', safety: 'safe', calories: 26, protein: 1, fat: 0.1, ca: 21, p: 44, desc: '富含纖維，對腸胃好。需煮熟。', warning: null },
+  { id: 4, name: '紅蘿蔔', type: 'veg', safety: 'safe', calories: 41, protein: 0.9, fat: 0.2, ca: 33, p: 35, desc: '富含維生素A，油炒吸收更好。', warning: null },
+  { id: 5, name: '地瓜', type: 'veg', safety: 'safe', calories: 86, protein: 1.6, fat: 0.1, ca: 30, p: 47, desc: '優質碳水，但熱量較高需控制。', warning: null },
+  { id: 6, name: '鮭魚', type: 'protein', safety: 'safe', calories: 208, protein: 20, fat: 13, ca: 9, p: 200, desc: '富含 Omega-3，務必去刺煮熟。', warning: null },
+  { id: 7, name: '花椰菜', type: 'veg', safety: 'caution', calories: 34, protein: 2.8, fat: 0.4, ca: 47, p: 66, desc: '十字花科，甲狀腺問題犬少吃。', warning: '建議每日不超過總食量 10%，需煮熟' },
+  { id: 8, name: '巧克力', type: 'snack', safety: 'toxic', calories: 546, protein: 5, fat: 30, ca: 0, p: 0, desc: '絕對禁止！含可可鹼。', warning: '致死風險：心臟衰竭' },
+  { id: 9, name: '葡萄', type: 'fruit', safety: 'toxic', calories: 67, protein: 0.6, fat: 0.4, ca: 0, p: 0, desc: '絕對禁止！含未知毒素。', warning: '致死風險：急性腎衰竭' },
+  { id: 10, name: '洋蔥', type: 'veg', safety: 'toxic', calories: 40, protein: 1.1, fat: 0.1, ca: 0, p: 0, desc: '破壞紅血球。', warning: '致死風險：溶血性貧血' },
+];
+
+// --- 2. 邏輯運算引擎 (Business Logic) ---
+
+// 計算 RER (Resting Energy Requirement)
+const calculateRER = (weight) => {
+  return Math.round(70 * Math.pow(weight, 0.75));
+};
+
+// 計算 DER (Daily Energy Requirement)
+const calculateDER = (rer, factor) => {
+  return Math.round(rer * factor);
+};
+
+// 鈣磷比檢查器
+const analyzeCaPRatio = (totalCa, totalP) => {
+  if (totalP === 0) return { ratio: 0, status: 'unknown', advice: '' };
+  const ratio = totalCa / totalP;
+  // 理想比例約 1:1 ~ 1.5:1
+  if (ratio < 1.0) {
+    return { 
+      ratio: ratio.toFixed(2), 
+      status: 'low', 
+      advice: `缺鈣警告 (1:${(1/ratio).toFixed(1)})。肉類磷含量高，務必添加鈣粉或蛋殼粉平衡。` 
+    };
+  } else if (ratio > 2.0) {
+    return { 
+      ratio: ratio.toFixed(2), 
+      status: 'high', 
+      advice: `鈣質過高 (1:${ratio.toFixed(1)})。請減少骨頭或鈣粉攝取。` 
+    };
+  }
+  return { 
+    ratio: ratio.toFixed(2), 
+    status: 'good', 
+    advice: '鈣磷比完美！' 
+  };
+};
+
+export default function FurLogicApp() {
+  const [activeTab, setActiveTab] = useState('home');
+  const [showSettings, setShowSettings] = useState(false);
+  
+  // --- 使用者設定 State (可編輯) ---
+  const [petProfile, setPetProfile] = useState({
+    name: 'Mochi',
+    weight: 12,
+    isNeutered: true,
+    activityLevel: 'normal' // low, normal, high
+  });
+
+  // --- 即時計算熱量需求 ---
+  const rer = useMemo(() => calculateRER(petProfile.weight), [petProfile.weight]);
+  const factor = useMemo(() => {
+    let base = petProfile.isNeutered ? 1.6 : 1.8;
+    if (petProfile.activityLevel === 'low') base -= 0.2;
+    if (petProfile.activityLevel === 'high') base += 0.4;
+    return base;
+  }, [petProfile]);
+  const der = calculateDER(rer, factor);
+  const waterNeed = Math.round(petProfile.weight * 60);
+
+  // --- 搜尋功能 State ---
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // --- 廚房功能 State ---
+  const [selectedIngredients, setSelectedIngredients] = useState([]);
+  const [recipeResult, setRecipeResult] = useState(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+
+  // --- Handlers ---
+  
+  const handleProfileUpdate = (e) => {
+    const { name, value, type, checked } = e.target;
+    setPetProfile(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) : value)
+    }));
+  };
+
+  const toggleIngredient = (item) => {
+    if (selectedIngredients.find(i => i.id === item.id)) {
+      setSelectedIngredients(prev => prev.filter(i => i.id !== item.id));
+    } else {
+      setSelectedIngredients(prev => [...prev, item]);
+    }
+  };
+
+  const generateRecipe = () => {
+    if (selectedIngredients.length === 0) return;
+    setIsCalculating(true);
+
+    // 模擬運算延遲
+    setTimeout(() => {
+      // 1. 簡單分配重量 (假設肉類佔 60%, 蔬菜 40% 為基底來分配今日一餐熱量)
+      // 這裡是一個簡化的演算法，真實情況會更複雜
+      const mealCalories = Math.round(der / 2); // 一餐
+      
+      const proteins = selectedIngredients.filter(i => i.type === 'protein');
+      const vegs = selectedIngredients.filter(i => i.type !== 'protein');
+      
+      let recipeItems = [];
+      let totalCa = 0;
+      let totalP = 0;
+      let totalProtein = 0;
+      let totalFat = 0;
+
+      // 分配邏輯：如果有肉，肉拿走 70% 熱量；沒肉就平均分
+      const proteinCalBudget = proteins.length > 0 ? mealCalories * 0.7 : 0;
+      const vegCalBudget = proteins.length > 0 ? mealCalories * 0.3 : mealCalories;
+
+      // 計算肉類份量
+      proteins.forEach(p => {
+        const targetCal = proteinCalBudget / proteins.length;
+        const amount = Math.round((targetCal / p.calories) * 100); // 克數
+        recipeItems.push({ ...p, amount });
+        totalCa += (p.ca * amount) / 100;
+        totalP += (p.p * amount) / 100;
+        totalProtein += (p.protein * amount) / 100;
+        totalFat += (p.fat * amount) / 100;
+      });
+
+      // 計算蔬菜份量
+      vegs.forEach(v => {
+        const targetCal = vegCalBudget / vegs.length;
+        const amount = Math.round((targetCal / v.calories) * 100);
+        recipeItems.push({ ...v, amount });
+        totalCa += (v.ca * amount) / 100;
+        totalP += (v.p * amount) / 100;
+        totalProtein += (v.protein * amount) / 100;
+        totalFat += (v.fat * amount) / 100;
+      });
+
+      // 檢查鈣磷比
+      const caPAnalysis = analyzeCaPRatio(totalCa, totalP);
+      
+      // 生成補充品建議
+      const supplements = [];
+      if (caPAnalysis.status === 'low') {
+        // 需補鈣量：目標讓 Ca = P * 1.2
+        const targetCa = totalP * 1.2;
+        const missingCa = targetCa - totalCa;
+        // 假設蛋殼粉 1g 約含 350mg 鈣
+        const eggShellPowder = (missingCa / 350).toFixed(1);
+        supplements.push({ name: '蛋殼粉', amount: `${eggShellPowder}g`, reason: '平衡鈣磷比' });
+      }
+      supplements.push({ name: '魚油', amount: '1顆', reason: '補充 Omega-3' });
+
+      setRecipeResult({
+        items: recipeItems,
+        macros: { 
+          p: Math.round(totalProtein), 
+          f: Math.round(totalFat), 
+          c: Math.round((mealCalories - totalProtein*4 - totalFat*9)/4) 
+        },
+        calories: mealCalories,
+        analysis: caPAnalysis,
+        supplements
+      });
+      
+      setIsCalculating(false);
+    }, 1200);
+  };
+
+  // --- UI Components ---
+  const TabButton = ({ id, label, icon: Icon }) => (
+    <button 
+      onClick={() => setActiveTab(id)}
+      className={`flex flex-col items-center p-2 rounded-xl transition duration-200 ${activeTab === id ? 'text-orange-600 bg-orange-50' : 'text-gray-400 hover:bg-gray-50'}`}
+    >
+      <Icon size={24} strokeWidth={activeTab === id ? 2.5 : 2} />
+      <span className="text-[10px] font-medium mt-1">{label}</span>
+    </button>
+  );
+
+  return (
+    <div className="max-w-md mx-auto bg-gray-50 h-[100dvh] flex flex-col font-sans text-gray-800 shadow-2xl relative overflow-hidden">
+      
+      {/* 頂部導航 */}
+      <div className="bg-white px-5 py-4 shadow-sm z-20 flex justify-between items-center sticky top-0">
+        {showSettings ? (
+          <div className="flex items-center gap-2 w-full">
+            <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-100 rounded-full">
+               <ArrowLeft size={24} className="text-gray-600"/>
+            </button>
+            <h1 className="font-bold text-lg text-gray-800">毛孩檔案設定</h1>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 bg-gradient-to-br from-orange-400 to-red-500 rounded-xl flex items-center justify-center text-white font-bold shadow-orange-200 shadow-lg">FL</div>
+              <h1 className="font-bold text-xl tracking-tight text-gray-800">FurLogic</h1>
+            </div>
+            <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 bg-gray-100 pl-3 pr-2 py-1.5 rounded-full hover:bg-gray-200 transition">
+              <span className="text-sm font-bold text-gray-700">{petProfile.name}</span>
+              <Settings size={16} className="text-gray-500"/>
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* 主要內容區 */}
+      <div className="flex-1 overflow-y-auto pb-24 scrollbar-hide">
+        
+        {/* --- 設定頁面 --- */}
+        {showSettings ? (
+          <div className="p-6 space-y-6 animate-in slide-in-from-right duration-300">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">毛孩名字</label>
+                <input type="text" name="name" value={petProfile.name} onChange={handleProfileUpdate} className="w-full p-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"/>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">體重 (kg)</label>
+                <input type="number" name="weight" value={petProfile.weight} onChange={handleProfileUpdate} className="w-full p-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"/>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl">
+                <span className="text-sm font-medium text-gray-700">已結紮</span>
+                <input type="checkbox" name="isNeutered" checked={petProfile.isNeutered} onChange={handleProfileUpdate} className="w-5 h-5 accent-orange-500"/>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">活動量</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['low', 'normal', 'high'].map(level => (
+                    <button 
+                      key={level}
+                      onClick={() => setPetProfile(prev => ({...prev, activityLevel: level}))}
+                      className={`py-2 rounded-lg text-sm font-medium border ${petProfile.activityLevel === level ? 'bg-orange-100 border-orange-500 text-orange-700' : 'bg-white border-gray-200 text-gray-500'}`}
+                    >
+                      {level === 'low' ? '慵懶' : level === 'normal' ? '一般' : '好動'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setShowSettings(false)} className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold flex justify-center items-center gap-2 mt-8">
+              <Save size={18} /> 儲存設定
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* --- 功能 1: 首頁 (健康儀表板) --- */}
+            {activeTab === 'home' && (
+              <div className="p-5 space-y-6 animate-in fade-in duration-300">
+                {/* 熱量卡片 */}
+                <div className="bg-gradient-to-br from-orange-500 to-red-500 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 opacity-10 transform translate-x-8 -translate-y-4">
+                    <Activity size={140} />
+                  </div>
+                  <p className="text-orange-100 text-sm font-medium mb-1 flex items-center gap-1"><Activity size={14}/> 每日代謝能需求 (DER)</p>
+                  <div className="flex items-baseline gap-2">
+                    <h2 className="text-5xl font-bold tracking-tight">{der}</h2>
+                    <span className="text-lg opacity-80 font-medium">kcal</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-white/20">
+                    <div>
+                      <p className="text-xs text-orange-100 mb-1">RER (基礎代謝)</p>
+                      <p className="font-bold text-lg">{rer} <span className="text-xs font-normal opacity-70">kcal</span></p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-orange-100 mb-1">建議飲水量</p>
+                      <p className="font-bold text-lg">{waterNeed} <span className="text-xs font-normal opacity-70">ml</span></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-200 transition cursor-pointer" onClick={() => setActiveTab('search')}>
+                      <div className="absolute right-2 top-2 bg-green-100 p-2 rounded-full text-green-600 group-hover:scale-110 transition"><Search size={20}/></div>
+                      <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Database</span>
+                      <div>
+                        <h3 className="font-bold text-lg text-gray-800">能不能吃?</h3>
+                        <p className="text-xs text-gray-400 mt-1">查詢食材安全等級</p>
+                      </div>
+                   </div>
+                   <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-200 transition cursor-pointer" onClick={() => setActiveTab('kitchen')}>
+                      <div className="absolute right-2 top-2 bg-orange-100 p-2 rounded-full text-orange-600 group-hover:scale-110 transition"><ChefHat size={20}/></div>
+                      <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">AI Kitchen</span>
+                      <div>
+                        <h3 className="font-bold text-lg text-gray-800">配餐計算</h3>
+                        <p className="text-xs text-gray-400 mt-1">智慧食譜生成</p>
+                      </div>
+                   </div>
+                </div>
+
+                {/* 衛教小卡 */}
+                <div className="bg-blue-50 rounded-2xl p-4 flex gap-4 border border-blue-100">
+                  <div className="bg-white p-2 rounded-xl h-fit shadow-sm text-blue-500">
+                    <Info size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-blue-900 text-sm">為什麼要關注鈣磷比？</h4>
+                    <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+                      長期只吃純肉(高磷)會導致鈣質流失，引發「營養性繼發性副甲狀腺亢進」，造成骨質疏鬆。記得添加蛋殼粉喔！
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* --- 功能 2: 查詢 (知識庫) --- */}
+            {activeTab === 'search' && (
+              <div className="p-5 h-full flex flex-col animate-in fade-in duration-300">
+                <h2 className="font-bold text-2xl text-gray-800 mb-4">食材知識庫</h2>
+                <div className="relative mb-4">
+                  <Search className="absolute left-4 top-3.5 text-gray-400" size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="輸入食材名稱 (例: 雞肉)" 
+                    className="w-full bg-white border border-gray-200 rounded-2xl py-3 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pb-20">
+                  {INITIAL_DB.filter(item => item.name.includes(searchTerm)).map(item => (
+                    <div key={item.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition">
+                      <div className="flex justify-between items-start">
+                        <h3 className="font-bold text-lg text-gray-800">{item.name}</h3>
+                        {item.safety === 'safe' && <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1"><Check size={12}/> 安全</span>}
+                        {item.safety === 'caution' && <span className="bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1"><AlertTriangle size={12}/> 注意</span>}
+                        {item.safety === 'toxic' && <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1"><X size={12}/> 禁止</span>}
+                      </div>
+                      <p className="text-sm text-gray-600 mt-2 mb-3">{item.desc}</p>
+                      
+                      {/* 營養快覽 */}
+                      <div className="flex gap-3 text-xs text-gray-400 mb-2">
+                         <span>🔥 {item.calories} kcal</span>
+                         <span>Ca: {item.ca}mg</span>
+                         <span>P: {item.p}mg</span>
+                      </div>
+
+                      {item.warning && (
+                        <div className="bg-red-50 text-red-600 text-xs p-3 rounded-xl flex items-start gap-2 font-medium">
+                          <AlertTriangle size={14} className="mt-0.5 shrink-0"/>
+                          {item.warning}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {INITIAL_DB.filter(item => item.name.includes(searchTerm)).length === 0 && (
+                     <div className="text-center py-10 text-gray-400">
+                        <p>找不到相關食材</p>
+                        <p className="text-xs mt-2">試試看「南瓜」或「巧克力」</p>
+                     </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* --- 功能 3: 廚房 (AI 配餐) --- */}
+            {activeTab === 'kitchen' && (
+              <div className="p-5 h-full flex flex-col animate-in fade-in duration-300">
+                {!recipeResult ? (
+                  <>
+                    <h2 className="font-bold text-2xl text-gray-800 mb-2">AI 智能配餐</h2>
+                    <p className="text-sm text-gray-500 mb-6">點選冰箱有的食材，系統自動計算均衡食譜。</p>
+                    
+                    <div className="flex-1 overflow-y-auto mb-20">
+                      <div className="grid grid-cols-2 gap-3 pb-24">
+                        {INITIAL_DB.filter(i => i.safety !== 'toxic').map(item => {
+                          const isSelected = selectedIngredients.find(i => i.id === item.id);
+                          return (
+                            <div 
+                              key={item.id} 
+                              onClick={() => toggleIngredient(item)}
+                              className={`p-4 rounded-2xl border transition cursor-pointer relative ${isSelected ? 'border-orange-500 bg-orange-50 shadow-md ring-1 ring-orange-500' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                            >
+                              <span className="font-bold text-gray-800">{item.name}</span>
+                              <div className="flex justify-between mt-2 text-xs text-gray-500">
+                                <span>{item.type === 'protein' ? '蛋白質' : '蔬果'}</span>
+                                <span>{item.calories} kcal</span>
+                              </div>
+                              {isSelected && <div className="absolute top-2 right-2 text-orange-500"><Check size={16}/></div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="absolute bottom-20 left-0 w-full px-5 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent pt-10 pb-5">
+                       <button 
+                        onClick={generateRecipe}
+                        disabled={selectedIngredients.length === 0 || isCalculating}
+                        className={`w-full py-4 rounded-2xl font-bold text-white shadow-lg flex justify-center items-center gap-2 transform active:scale-95 transition ${selectedIngredients.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-gray-900'}`}
+                      >
+                        {isCalculating ? (
+                          <>
+                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                            計算營養與鈣磷比...
+                          </>
+                        ) : (
+                          <>
+                            <ChefHat size={20} />
+                            生成 {petProfile.name} 的專屬食譜
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  // 食譜結果頁面
+                  <div className="h-full overflow-y-auto pb-24 animate-in slide-in-from-bottom duration-500">
+                    <button onClick={() => setRecipeResult(null)} className="flex items-center gap-1 text-gray-500 font-medium mb-4 hover:text-gray-800">
+                      <ChevronRight className="rotate-180" size={18}/> 重新選擇
+                    </button>
+                    
+                    <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden mb-6">
+                      <div className="bg-gray-900 p-6 text-white">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Generated Recipe</p>
+                            <h2 className="text-2xl font-bold">營養均衡鮮食餐</h2>
+                          </div>
+                          <div className="bg-gray-800 px-3 py-1 rounded-lg text-sm font-bold border border-gray-700">
+                            {recipeResult.calories} kcal
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="p-6 space-y-8">
+                        
+                        {/* 1. 鈣磷比分析 (核心邏輯展示) */}
+                        <div className={`p-4 rounded-2xl border ${recipeResult.analysis.status === 'good' ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                             {recipeResult.analysis.status === 'good' ? <Check size={18} className="text-green-600"/> : <AlertTriangle size={18} className="text-orange-600"/>}
+                             <h3 className={`font-bold text-sm ${recipeResult.analysis.status === 'good' ? 'text-green-800' : 'text-orange-800'}`}>
+                               鈣磷比分析 (Ca:P = 1:{recipeResult.analysis.ratio})
+                             </h3>
+                          </div>
+                          <p className="text-xs text-gray-600 leading-relaxed">
+                            {recipeResult.analysis.advice}
+                          </p>
+                        </div>
+
+                        {/* 2. 食材清單 */}
+                        <div>
+                          <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><Utensils size={16}/> 準備食材</h3>
+                          <div className="space-y-3">
+                            {recipeResult.items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                                <span className="text-gray-700">{item.name}</span>
+                                <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">{item.amount}g</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 3. 營養補充品 */}
+                        <div>
+                           <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><Info size={16}/> 營養師建議添加</h3>
+                           <div className="bg-blue-50 rounded-2xl p-4 space-y-3">
+                              {recipeResult.supplements.map((sup, idx) => (
+                                <div key={idx} className="flex justify-between items-center">
+                                  <div>
+                                    <span className="text-blue-900 font-bold text-sm block">{sup.name}</span>
+                                    <span className="text-blue-500 text-xs">{sup.reason}</span>
+                                  </div>
+                                  <span className="font-bold text-blue-900">{sup.amount}</span>
+                                </div>
+                              ))}
+                           </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 底部導航欄 */}
+      {!showSettings && (
+        <div className="bg-white border-t border-gray-200 px-6 py-2 flex justify-between items-center absolute bottom-0 w-full z-30 pb-safe">
+          <TabButton id="home" label="健康" icon={Activity} />
+          <TabButton id="search" label="查詢" icon={Search} />
+          <TabButton id="kitchen" label="配餐" icon={ChefHat} />
+        </div>
+      )}
+    </div>
+  );
+}
