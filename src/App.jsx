@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Activity, Search, ChefHat, Settings, ArrowLeft } from 'lucide-react';
 import TabButton from './components/TabButton';
 import SettingsPage from './components/SettingsPage';
@@ -11,17 +11,28 @@ import {
   calculateActivityFactor,
   calculateWaterNeed
 } from './utils/nutritionCalculator';
+import {
+  getPetProfile,
+  savePetProfile,
+  getActiveTab,
+  saveActiveTab
+} from './utils/storage';
 
 export default function FurLogicApp() {
-  const [activeTab, setActiveTab] = useState('home');
+  // 從 localStorage 讀取初始狀態
+  const [activeTab, setActiveTab] = useState(() => getActiveTab());
   const [showSettings, setShowSettings] = useState(false);
+  const [petProfile, setPetProfile] = useState(() => getPetProfile());
 
-  const [petProfile, setPetProfile] = useState({
-    name: 'Mochi',
-    weight: 12,
-    isNeutered: true,
-    activityLevel: 'normal'
-  });
+  // 當 activeTab 變更時儲存到 localStorage
+  useEffect(() => {
+    saveActiveTab(activeTab);
+  }, [activeTab]);
+
+  // 當 petProfile 變更時儲存到 localStorage
+  useEffect(() => {
+    savePetProfile(petProfile);
+  }, [petProfile]);
 
   // 即時計算營養需求
   const rer = useMemo(() => calculateRER(petProfile.weight), [petProfile.weight]);
@@ -34,6 +45,7 @@ export default function FurLogicApp() {
 
   const handleSaveSettings = () => {
     setShowSettings(false);
+    // petProfile 會自動由 useEffect 儲存
   };
 
   return (
