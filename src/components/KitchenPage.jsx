@@ -1,15 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChefHat, Check, ChevronRight, Info, AlertTriangle, Utensils } from 'lucide-react';
 import { FOOD_DATABASE } from '../data/foodDatabase';
 import { generateRecipe } from '../utils/nutritionCalculator';
+import { getKitchenIngredients, saveKitchenIngredients } from '../utils/storage';
 
 /**
  * AI 智能配餐頁面
  */
 export default function KitchenPage({ petProfile, der }) {
-  const [selectedIngredients, setSelectedIngredients] = useState([]);
+  // 從 localStorage 讀取初始食材選擇
+  const [selectedIngredients, setSelectedIngredients] = useState(() => {
+    const savedIngredients = getKitchenIngredients();
+    // 驗證讀取的資料是否有效
+    if (Array.isArray(savedIngredients) && savedIngredients.length > 0) {
+      // 確保所有食材仍存在於資料庫中
+      return savedIngredients.filter(savedItem => 
+        FOOD_DATABASE.find(dbItem => dbItem.id === savedItem.id)
+      );
+    }
+    return [];
+  });
+  
   const [recipeResult, setRecipeResult] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
+
+  // 當食材選擇變更時儲存到 localStorage
+  useEffect(() => {
+    saveKitchenIngredients(selectedIngredients);
+  }, [selectedIngredients]);
 
   const safeIngredients = FOOD_DATABASE.filter(i => i.safety !== 'toxic');
 
@@ -35,18 +53,31 @@ export default function KitchenPage({ petProfile, der }) {
 
   const handleReset = () => {
     setRecipeResult(null);
+    // 不清除食材選擇,讓使用者可以快速再次生成
+  };
+
+  const handleClearAll = () => {
     setSelectedIngredients([]);
+    setRecipeResult(null);
   };
 
   if (recipeResult) {
     return (
       <div className="p-5 h-full overflow-y-auto pb-24 animate-in slide-in-from-bottom duration-500">
-        <button
-          onClick={handleReset}
-          className="flex items-center gap-1 text-gray-500 font-medium mb-4 hover:text-gray-800"
-        >
-          <ChevronRight className="rotate-180" size={18} /> 重新選擇
-        </button>
+        <div className="flex justify-between items-center mb-4">
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1 text-gray-500 font-medium hover:text-gray-800"
+          >
+            <ChevronRight className="rotate-180" size={18} /> 重新選擇
+          </button>
+          <button
+            onClick={handleClearAll}
+            className="text-xs text-gray-400 hover:text-red-500 underline"
+          >
+            清空食材
+          </button>
+        </div>
 
         <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden mb-6">
           <div className="bg-gray-900 p-6 text-white">
@@ -140,7 +171,17 @@ export default function KitchenPage({ petProfile, der }) {
 
   return (
     <div className="p-5 h-full flex flex-col animate-in fade-in duration-300">
-      <h2 className="font-bold text-2xl text-gray-800 mb-2">AI 智能配餐</h2>
+      <div className="flex justify-between items-start mb-2">
+        <h2 className="font-bold text-2xl text-gray-800">AI 智能配餐</h2>
+        {selectedIngredients.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            className="text-xs text-gray-400 hover:text-red-500 underline"
+          >
+            清空 ({selectedIngredients.length})
+          </button>
+        )}
+      </div>
       <p className="text-sm text-gray-500 mb-6">
         點選冰箱有的食材,系統自動計算均衡食譜。
       </p>
