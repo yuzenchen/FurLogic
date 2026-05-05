@@ -1,10 +1,14 @@
 import React from 'react';
 import { Activity, Info, Search, ChefHat } from 'lucide-react';
+import { usePet } from '../context/PetContext';
 
 /**
  * 首頁 - 健康儀表板
  */
-export default function HomePage({ petProfile, rer, der, waterNeed, onNavigate }) {
+export default function HomePage({ onNavigate }) {
+  const { metrics } = usePet();
+  const { rer, der, waterNeed } = metrics;
+
   return (
     <div className="p-5 space-y-6 animate-in fade-in duration-300">
       {/* 熱量卡片 */}
@@ -30,7 +34,8 @@ export default function HomePage({ petProfile, rer, der, waterNeed, onNavigate }
           <div>
             <p className="text-xs text-orange-100 mb-1">建議飲水量</p>
             <p className="font-bold text-lg">
-              {waterNeed} <span className="text-xs font-normal opacity-70">ml</span>
+              {waterNeed}{' '}
+              <span className="text-xs font-normal opacity-70">ml</span>
             </p>
           </div>
         </div>
@@ -38,9 +43,10 @@ export default function HomePage({ petProfile, rer, der, waterNeed, onNavigate }
 
       {/* 功能快捷卡片 */}
       <div className="grid grid-cols-2 gap-4">
-        <div
-          className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-200 transition cursor-pointer"
+        <button
+          type="button"
           onClick={() => onNavigate('search')}
+          className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-200 transition cursor-pointer text-left"
         >
           <div className="absolute right-2 top-2 bg-green-100 p-2 rounded-full text-green-600 group-hover:scale-110 transition">
             <Search size={20} />
@@ -52,11 +58,12 @@ export default function HomePage({ petProfile, rer, der, waterNeed, onNavigate }
             <h3 className="font-bold text-lg text-gray-800">能不能吃?</h3>
             <p className="text-xs text-gray-400 mt-1">查詢食材安全等級</p>
           </div>
-        </div>
+        </button>
 
-        <div
-          className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-200 transition cursor-pointer"
+        <button
+          type="button"
           onClick={() => onNavigate('kitchen')}
+          className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-200 transition cursor-pointer text-left"
         >
           <div className="absolute right-2 top-2 bg-orange-100 p-2 rounded-full text-orange-600 group-hover:scale-110 transition">
             <ChefHat size={20} />
@@ -68,7 +75,7 @@ export default function HomePage({ petProfile, rer, der, waterNeed, onNavigate }
             <h3 className="font-bold text-lg text-gray-800">配餐計算</h3>
             <p className="text-xs text-gray-400 mt-1">智慧食譜生成</p>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* 衛教小卡 */}

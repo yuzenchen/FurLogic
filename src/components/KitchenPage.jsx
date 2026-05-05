@@ -2,29 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { ChefHat, Check, ChevronRight, Info, AlertTriangle, Utensils } from 'lucide-react';
 import { FOOD_DATABASE } from '../data/foodDatabase';
 import { generateRecipe } from '../utils/nutritionCalculator';
+import { MEALS_PER_DAY } from '../utils/nutritionConstants';
 import { getKitchenIngredients, saveKitchenIngredients } from '../utils/storage';
+import { usePet } from '../context/PetContext';
 
 /**
  * AI 智能配餐頁面
  */
-export default function KitchenPage({ petProfile, der }) {
-  // 從 localStorage 讀取初始食材選擇
+export default function KitchenPage() {
+  const { profile, metrics } = usePet();
+  const der = metrics.der;
+
   const [selectedIngredients, setSelectedIngredients] = useState(() => {
-    const savedIngredients = getKitchenIngredients();
-    // 驗證讀取的資料是否有效
-    if (Array.isArray(savedIngredients) && savedIngredients.length > 0) {
-      // 確保所有食材仍存在於資料庫中
-      return savedIngredients.filter(savedItem => 
-        FOOD_DATABASE.find(dbItem => dbItem.id === savedItem.id)
-      );
-    }
-    return [];
+    const saved = getKitchenIngredients();
+    if (!Array.isArray(saved) || saved.length === 0) return [];
+    // 過濾掉已不在資料庫中的食材
+    return saved.filter((s) => FOOD_DATABASE.some((d) => d.id === s.id));
   });
-  
+
   const [recipeResult, setRecipeResult] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
-  // 當食材選擇變更時儲存到 localStorage
   useEffect(() => {
     saveKitchenIngredients(selectedIngredients);
   }, [selectedIngredients]);
@@ -44,7 +42,7 @@ export default function KitchenPage({ petProfile, der }) {
     setIsCalculating(true);
 
     setTimeout(() => {
-      const mealCalories = Math.round(der / 2); // 一餐
+      const mealCalories = Math.round(der / MEALS_PER_DAY);
       const result = generateRecipe(selectedIngredients, mealCalories);
       setRecipeResult(result);
       setIsCalculating(false);
@@ -234,7 +232,7 @@ export default function KitchenPage({ petProfile, der }) {
           ) : (
             <>
               <ChefHat size={20} />
-              生成 {petProfile.name} 的專屬食譜
+              生成 {profile.name} 的專屬食譜
             </>
           )}
         </button>

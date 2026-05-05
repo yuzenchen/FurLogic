@@ -1,52 +1,29 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Activity, Search, ChefHat, Settings, ArrowLeft } from 'lucide-react';
 import TabButton from './components/TabButton';
 import SettingsPage from './components/SettingsPage';
 import HomePage from './components/HomePage';
 import SearchPage from './components/SearchPage';
 import KitchenPage from './components/KitchenPage';
-import {
-  calculateRER,
-  calculateDER,
-  calculateActivityFactor,
-  calculateWaterNeed
-} from './utils/nutritionCalculator';
-import {
-  getPetProfile,
-  savePetProfile,
-  getActiveTab,
-  saveActiveTab
-} from './utils/storage';
+import usePersistentState from './hooks/usePersistentState';
+import { PetProvider, usePet } from './context/PetContext';
+import { getActiveTab, saveActiveTab } from './utils/storage';
 
 export default function FurLogicApp() {
-  // 從 localStorage 讀取初始狀態
-  const [activeTab, setActiveTab] = useState(() => getActiveTab());
-  const [showSettings, setShowSettings] = useState(false);
-  const [petProfile, setPetProfile] = useState(() => getPetProfile());
-
-  // 當 activeTab 變更時儲存到 localStorage
-  useEffect(() => {
-    saveActiveTab(activeTab);
-  }, [activeTab]);
-
-  // 當 petProfile 變更時儲存到 localStorage
-  useEffect(() => {
-    savePetProfile(petProfile);
-  }, [petProfile]);
-
-  // 即時計算營養需求
-  const rer = useMemo(() => calculateRER(petProfile.weight), [petProfile.weight]);
-  const factor = useMemo(
-    () => calculateActivityFactor(petProfile.isNeutered, petProfile.activityLevel),
-    [petProfile.isNeutered, petProfile.activityLevel]
+  return (
+    <PetProvider>
+      <Shell />
+    </PetProvider>
   );
-  const der = calculateDER(rer, factor);
-  const waterNeed = calculateWaterNeed(petProfile.weight);
+}
 
-  const handleSaveSettings = () => {
-    setShowSettings(false);
-    // petProfile 會自動由 useEffect 儲存
-  };
+function Shell() {
+  const [activeTab, setActiveTab] = usePersistentState(
+    getActiveTab,
+    saveActiveTab,
+  );
+  const [showSettings, setShowSettings] = useState(false);
+  const { profile } = usePet();
 
   return (
     <div className="max-w-md mx-auto bg-gray-50 h-[100dvh] flex flex-col font-sans text-gray-800 shadow-2xl relative overflow-hidden">
@@ -55,7 +32,9 @@ export default function FurLogicApp() {
         {showSettings ? (
           <div className="flex items-center gap-2 w-full">
             <button
+              type="button"
               onClick={() => setShowSettings(false)}
+              aria-label="返回"
               className="p-1 hover:bg-gray-100 rounded-full"
             >
               <ArrowLeft size={24} className="text-gray-600" />
@@ -73,11 +52,13 @@ export default function FurLogicApp() {
               </h1>
             </div>
             <button
+              type="button"
               onClick={() => setShowSettings(true)}
+              aria-label="開啟毛孩檔案設定"
               className="flex items-center gap-2 bg-gray-100 pl-3 pr-2 py-1.5 rounded-full hover:bg-gray-200 transition"
             >
               <span className="text-sm font-bold text-gray-700">
-                {petProfile.name}
+                {profile.name}
               </span>
               <Settings size={16} className="text-gray-500" />
             </button>
@@ -88,26 +69,12 @@ export default function FurLogicApp() {
       {/* 主要內容區 */}
       <div className="flex-1 overflow-y-auto pb-24 scrollbar-hide">
         {showSettings ? (
-          <SettingsPage
-            petProfile={petProfile}
-            onUpdate={setPetProfile}
-            onSave={handleSaveSettings}
-          />
+          <SettingsPage onSave={() => setShowSettings(false)} />
         ) : (
           <>
-            {activeTab === 'home' && (
-              <HomePage
-                petProfile={petProfile}
-                rer={rer}
-                der={der}
-                waterNeed={waterNeed}
-                onNavigate={setActiveTab}
-              />
-            )}
+            {activeTab === 'home' && <HomePage onNavigate={setActiveTab} />}
             {activeTab === 'search' && <SearchPage />}
-            {activeTab === 'kitchen' && (
-              <KitchenPage petProfile={petProfile} der={der} />
-            )}
+            {activeTab === 'kitchen' && <KitchenPage />}
           </>
         )}
       </div>
