@@ -112,10 +112,7 @@ function SupplementList({ supplements }) {
       </h3>
       <ul className="bg-blue-50 rounded-2xl p-4 space-y-3">
         {supplements.map((sup) => (
-          <li
-            key={sup.name}
-            className="flex justify-between items-center"
-          >
+          <li key={sup.name} className="flex justify-between items-center">
             <div>
               <span className="text-blue-900 font-bold text-sm block">
                 {sup.name}

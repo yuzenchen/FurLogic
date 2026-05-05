@@ -36,7 +36,7 @@ export const CAP_RATIO_TARGET = 1.2; // 補鈣時的目標比
 
 // === 配餐熱量分配 ===
 export const MEAT_CALORIE_RATIO = 0.7; // 有肉時,肉類佔總熱量比例
-export const MEALS_PER_DAY = 2;        // DER 預設拆兩餐
+export const MEALS_PER_DAY = 2; // DER 預設拆兩餐
 
 // === 補充品 ===
 export const EGGSHELL_CA_MG_PER_GRAM = 350;

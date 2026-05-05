@@ -43,48 +43,46 @@
 ### 專案結構
 ```
 FurLogic/
-├── .github/
-│   └── workflows/                # GitHub Actions 配置
-│       └── deploy-gh-pages.yml   # GitHub Pages 部署
+├── .github/workflows/deploy-gh-pages.yml
 ├── src/
-│   ├── components/         # React 元件
+│   ├── App.jsx                    # 容器:routing + layout
+│   ├── main.jsx
+│   ├── components/
+│   │   ├── HomePage.jsx           # 健康儀表板
+│   │   ├── SearchPage.jsx         # 食材知識庫
+│   │   ├── SettingsPage.jsx       # 毛孩檔案設定
+│   │   ├── KitchenPage.jsx        # 配餐容器
 │   │   ├── TabButton.jsx
-│   │   ├── SettingsPage.jsx
-│   │   ├── HomePage.jsx
-│   │   ├── SearchPage.jsx
-│   │   └── KitchenPage.jsx
-│   ├── data/              # 資料層
-│   │   └── foodDatabase.js
-│   ├── utils/             # 工具函數
-│   │   └── nutritionCalculator.js
-│   ├── styles/            # 樣式檔案
-│   │   └── index.css
-│   └── App.jsx            # 主應用程式
+│   │   └── kitchen/
+│   │       ├── IngredientPicker.jsx
+│   │       └── RecipeResult.jsx
+│   ├── context/PetContext.jsx     # 毛孩檔案 + 衍生指標 (Provider/usePet)
+│   ├── hooks/
+│   │   ├── usePersistentState.js  # localStorage 持久化的 useState
+│   │   ├── usePetMetrics.js       # RER/DER/活動係數/飲水量
+│   │   └── useKitchenIngredients.js
+│   ├── data/foodDatabase.js
+│   ├── utils/
+│   │   ├── nutritionCalculator.js
+│   │   ├── nutritionCalculator.test.js
+│   │   ├── nutritionConstants.js  # NRC/WSAVA/AAFCO 來源常數
+│   │   └── storage.js
+│   └── styles/index.css
+├── .prettierrc.json
 ├── package.json
-├── .gitignore
 └── README.md
 ```
 
 ## 快速開始
 
-### 安裝依賴
 ```bash
-npm install
-```
-
-### 開發模式
-```bash
-npm run dev
-```
-
-### 建置生產版本
-```bash
-npm run build
-```
-
-### 本地預覽
-```bash
-npm run preview
+npm install      # 安裝依賴
+npm run dev      # 開發模式 (http://localhost:3000)
+npm test         # 跑單元測試
+npm run build    # 建置生產版本
+npm run preview  # 本地預覽 build 結果
+npm run lint     # ESLint
+npm run format   # Prettier 格式化
 ```
 
 ## 部署
@@ -154,13 +152,18 @@ DER = RER × 活動係數
 - 📋 獸醫師諮詢功能
 - 📋 社群分享食譜
 
-## 注意事項
+## 醫學免責聲明
 
 ⚠️ **重要提醒**
-- 本系統為輔助工具,不能取代專業獸醫建議
-- 初次轉換鮮食請諮詢獸醫師
-- 特殊疾病犬隻需要特別配方
-- 食材新鮮度與烹調方式同樣重要
+
+本應用提供的營養計算與食譜建議僅為**衛教參考**,**不構成獸醫診斷或處方**。
+
+- 計算公式 (RER/DER/鈣磷比) 來自公開的學術文獻 (NRC 2006、WSAVA 2011、AAFCO 等),可能未涵蓋您的毛孩個別需求
+- 鮮食轉換、特殊疾病(腎臟病、糖尿病、過敏、胰臟炎等)、幼犬幼貓、懷孕哺乳期動物**必須**先諮詢執業獸醫師
+- 食材安全等級僅列舉常見品項,並非完整毒物清單
+- 本專案作者與貢獻者**不承擔**因使用本應用造成的任何健康損害
+
+如毛孩出現嘔吐、腹瀉、食慾不振等異常症狀,請立即就醫。
 
 ## 貢獻
 

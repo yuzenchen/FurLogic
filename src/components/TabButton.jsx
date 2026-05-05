@@ -3,7 +3,13 @@ import React from 'react';
 /**
  * 底部導航標籤按鈕元件
  */
-export default function TabButton({ id, label, icon: Icon, activeTab, onClick }) {
+export default function TabButton({
+  id,
+  label,
+  icon: Icon,
+  activeTab,
+  onClick,
+}) {
   const isActive = activeTab === id;
 
   return (

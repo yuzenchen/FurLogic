@@ -84,7 +84,9 @@ export default function HomePage({ onNavigate }) {
           <Info size={24} />
         </div>
         <div>
-          <h4 className="font-bold text-blue-900 text-sm">為什麼要關注鈣磷比?</h4>
+          <h4 className="font-bold text-blue-900 text-sm">
+            為什麼要關注鈣磷比?
+          </h4>
           <p className="text-xs text-blue-700 mt-1 leading-relaxed">
             長期只吃純肉(高磷)會導致鈣質流失,引發「營養性繼發性副甲狀腺亢進」,造成骨質疏鬆。記得添加蛋殼粉喔!
           </p>

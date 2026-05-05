@@ -76,16 +76,18 @@ export default function SettingsPage({ onSave }) {
               <button
                 key={level}
                 type="button"
-                onClick={() =>
-                  setProfile({ ...profile, activityLevel: level })
-                }
+                onClick={() => setProfile({ ...profile, activityLevel: level })}
                 className={`py-2 rounded-lg text-sm font-medium border ${
                   profile.activityLevel === level
                     ? 'bg-orange-100 border-orange-500 text-orange-700'
                     : 'bg-white border-gray-200 text-gray-500'
                 }`}
               >
-                {level === 'low' ? '慵懶' : level === 'normal' ? '一般' : '好動'}
+                {level === 'low'
+                  ? '慵懶'
+                  : level === 'normal'
+                    ? '一般'
+                    : '好動'}
               </button>
             ))}
           </div>
