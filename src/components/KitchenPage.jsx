@@ -27,7 +27,10 @@ export default function KitchenPage() {
     saveKitchenIngredients(selectedIngredients);
   }, [selectedIngredients]);
 
-  const safeIngredients = FOOD_DATABASE.filter(i => i.safety !== 'toxic');
+  // 配餐區只列「可入菜」的食材 — 排除 toxic 與其他被標為 excluded 的角色
+  const safeIngredients = FOOD_DATABASE.filter(
+    (i) => i.recipeRole !== 'excluded',
+  );
 
   const toggleIngredient = (item) => {
     if (selectedIngredients.find(i => i.id === item.id)) {

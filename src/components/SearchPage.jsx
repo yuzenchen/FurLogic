@@ -1,38 +1,47 @@
 import React, { useState } from 'react';
 import { Search, Check, AlertTriangle, X } from 'lucide-react';
-import { FOOD_DATABASE } from '../data/foodDatabase';
+import { FOOD_DATABASE, SAFETY_LEVELS } from '../data/foodDatabase';
 
 /**
  * 食材知識庫查詢頁面
  */
+
+const TONE_CLASSES = {
+  green: 'bg-green-100 text-green-700',
+  yellow: 'bg-yellow-100 text-yellow-700',
+  red: 'bg-red-100 text-red-700',
+};
+
+const TONE_ICONS = {
+  green: Check,
+  yellow: AlertTriangle,
+  red: X,
+};
+
+function SafetyBadge({ safety }) {
+  const meta = SAFETY_LEVELS[safety];
+  if (!meta) return null;
+  const Icon = TONE_ICONS[meta.tone];
+  return (
+    <span
+      className={`text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 ${TONE_CLASSES[meta.tone]}`}
+    >
+      <Icon size={12} /> {meta.label}
+    </span>
+  );
+}
+
 export default function SearchPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredItems = FOOD_DATABASE.filter(item =>
-    item.name.includes(searchTerm)
-  );
-
-  const SafetyBadge = ({ safety }) => {
-    if (safety === 'safe') {
-      return (
-        <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1">
-          <Check size={12} /> 安全
-        </span>
-      );
-    }
-    if (safety === 'caution') {
-      return (
-        <span className="bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1">
-          <AlertTriangle size={12} /> 注意
-        </span>
-      );
-    }
+  const term = searchTerm.trim().toLowerCase();
+  const filteredItems = FOOD_DATABASE.filter((item) => {
+    if (!term) return true;
     return (
-      <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1">
-        <X size={12} /> 禁止
-      </span>
+      item.name.toLowerCase().includes(term) ||
+      (item.desc && item.desc.toLowerCase().includes(term))
     );
-  };
+  });
 
   return (
     <div className="p-5 h-full flex flex-col animate-in fade-in duration-300">
@@ -41,8 +50,9 @@ export default function SearchPage() {
       <div className="relative mb-4">
         <Search className="absolute left-4 top-3.5 text-gray-400" size={18} />
         <input
-          type="text"
+          type="search"
           placeholder="輸入食材名稱 (例: 雞肉)"
+          aria-label="搜尋食材"
           className="w-full bg-white border border-gray-200 rounded-2xl py-3 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -50,7 +60,7 @@ export default function SearchPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pb-20">
-        {filteredItems.map(item => (
+        {filteredItems.map((item) => (
           <div
             key={item.id}
             className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition"
@@ -61,7 +71,6 @@ export default function SearchPage() {
             </div>
             <p className="text-sm text-gray-600 mt-2 mb-3">{item.desc}</p>
 
-            {/* 營養快覽 */}
             <div className="flex gap-3 text-xs text-gray-400 mb-2">
               <span>🔥 {item.calories} kcal</span>
               <span>Ca: {item.ca}mg</span>

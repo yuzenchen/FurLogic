@@ -110,4 +110,13 @@ describe('generateRecipe', () => {
     const r = generateRecipe([pumpkin], 100);
     expect(r.supplements.find((s) => s.name === '魚油')).toBeTruthy();
   });
+
+  it('respects recipeRole over type for category split', () => {
+    // type=protein but recipeRole=plant → treat as plant
+    const oddCase = { ...chicken, recipeRole: 'plant' };
+    const r = generateRecipe([oddCase, pumpkin], 1000);
+    // No protein items → all 1000 kcal split between two plants (500 each)
+    const oddItem = r.items.find((i) => i.id === oddCase.id);
+    expect(oddItem.amount).toBe(500); // 500 kcal / 100 * 100 = 500g
+  });
 });

@@ -92,8 +92,11 @@ const allocatePortion = (food, calorieBudgetPerItem) =>
  * @param {number} targetCalories
  */
 export const generateRecipe = (selectedIngredients, targetCalories) => {
-  const proteins = selectedIngredients.filter((i) => i.type === 'protein');
-  const plants = selectedIngredients.filter((i) => i.type !== 'protein');
+  // 用 recipeRole(配餐角色),不要直接看顯示分類 type
+  // 舊資料若沒 recipeRole,fallback 到 type === 'protein'
+  const roleOf = (i) => i.recipeRole ?? (i.type === 'protein' ? 'protein' : 'plant');
+  const proteins = selectedIngredients.filter((i) => roleOf(i) === 'protein');
+  const plants = selectedIngredients.filter((i) => roleOf(i) === 'plant');
   const hasMeat = proteins.length > 0;
 
   const proteinBudget = hasMeat ? targetCalories * MEAT_CALORIE_RATIO : 0;
