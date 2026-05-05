@@ -108,6 +108,9 @@ export const generateRecipe = (selectedIngredients, targetCalories) => {
   const items = [];
   let totalCa = 0;
   let totalP = 0;
+  let totalProtein = 0;
+  let totalFat = 0;
+  let totalCalories = 0;
 
   const addGroup = (group, totalBudget) => {
     if (group.length === 0) return;
@@ -117,6 +120,10 @@ export const generateRecipe = (selectedIngredients, targetCalories) => {
       const minerals = accumulateMineral(food, amount);
       totalCa += minerals.ca;
       totalP += minerals.p;
+      // 每 100g 食材的營養 × 實際克數 / 100
+      totalProtein += ((food.protein ?? 0) * amount) / 100;
+      totalFat += ((food.fat ?? 0) * amount) / 100;
+      totalCalories += (food.calories * amount) / 100;
       items.push({ ...food, amount });
     });
   };
@@ -126,12 +133,45 @@ export const generateRecipe = (selectedIngredients, targetCalories) => {
 
   const analysis = analyzeCaPRatio(totalCa, totalP);
   const supplements = buildSupplements(analysis, totalCa, totalP);
+  const macros = computeMacros(totalProtein, totalFat, totalCalories);
 
   return {
     items,
     calories: targetCalories,
+    actualCalories: Math.round(totalCalories),
+    macros,
     analysis,
     supplements,
+  };
+};
+
+/**
+ * 從實際食材累計推算巨集營養素分布。
+ * 蛋白質/脂肪以 g 表示;碳水從「實際 totalCalories - protein*4 - fat*9」倒推,
+ * clamp 在 0 以上。回傳 g + 各占總熱量的百分比。
+ */
+const computeMacros = (totalProtein, totalFat, totalCalories) => {
+  const proteinKcal = totalProtein * 4;
+  const fatKcal = totalFat * 9;
+  const carbsKcal = Math.max(0, totalCalories - proteinKcal - fatKcal);
+  const carbs = carbsKcal / 4;
+
+  const sumKcal = proteinKcal + fatKcal + carbsKcal;
+  const safeSum = sumKcal > 0 ? sumKcal : 1;
+
+  return {
+    protein: {
+      g: Math.round(totalProtein),
+      pct: Math.round((proteinKcal / safeSum) * 100),
+    },
+    fat: {
+      g: Math.round(totalFat),
+      pct: Math.round((fatKcal / safeSum) * 100),
+    },
+    carbs: {
+      g: Math.round(carbs),
+      pct: Math.round((carbsKcal / safeSum) * 100),
+    },
   };
 };
 

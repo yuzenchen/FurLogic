@@ -1,11 +1,7 @@
 import React from 'react';
-import {
-  Check,
-  ChevronRight,
-  Info,
-  AlertTriangle,
-  Utensils,
-} from 'lucide-react';
+import { ChevronRight, Info, Utensils, Sparkles } from 'lucide-react';
+import CaPRatioGauge from './CaPRatioGauge';
+import MacroBars from './MacroBars';
 
 export default function RecipeResult({ recipe, onBack, onClearAll }) {
   return (
@@ -14,7 +10,7 @@ export default function RecipeResult({ recipe, onBack, onClearAll }) {
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1 text-gray-500 font-medium hover:text-gray-800"
+          className="flex items-center gap-1 text-gray-500 font-medium hover:text-gray-800 active:scale-95 transition"
         >
           <ChevronRight className="rotate-180" size={18} /> 重新選擇
         </button>
@@ -28,56 +24,38 @@ export default function RecipeResult({ recipe, onBack, onClearAll }) {
       </div>
 
       <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden mb-6">
-        <header className="bg-gray-900 p-6 text-white">
-          <div className="flex justify-between items-start">
+        <header className="bg-gradient-to-br from-orange-500 via-orange-500 to-red-500 p-6 text-white relative overflow-hidden">
+          <div className="absolute -top-6 -right-6 opacity-15">
+            <Sparkles size={140} />
+          </div>
+          <div className="flex justify-between items-start relative">
             <div>
-              <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">
-                Generated Recipe
+              <p className="text-orange-100 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Sparkles size={12} /> Generated Recipe
               </p>
-              <h2 className="text-2xl font-bold">營養均衡鮮食餐</h2>
+              <h2 className="text-2xl font-bold tracking-tight">
+                營養均衡鮮食餐
+              </h2>
             </div>
-            <div className="bg-gray-800 px-3 py-1 rounded-lg text-sm font-bold border border-gray-700">
+            <div className="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-lg text-sm font-bold border border-white/30">
               {recipe.calories} kcal
             </div>
           </div>
         </header>
 
-        <div className="p-6 space-y-8">
-          <CaPRatioCard analysis={recipe.analysis} />
+        <div className="p-6 space-y-7">
+          <CaPRatioGauge analysis={recipe.analysis} />
+          {recipe.macros && (
+            <MacroBars
+              macros={recipe.macros}
+              actualCalories={recipe.actualCalories}
+            />
+          )}
           <IngredientList items={recipe.items} />
           <SupplementList supplements={recipe.supplements} />
         </div>
       </div>
     </div>
-  );
-}
-
-function CaPRatioCard({ analysis }) {
-  const isGood = analysis.status === 'good';
-  return (
-    <section
-      className={`p-4 rounded-2xl border ${
-        isGood
-          ? 'bg-green-50 border-green-200'
-          : 'bg-orange-50 border-orange-200'
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        {isGood ? (
-          <Check size={18} className="text-green-600" />
-        ) : (
-          <AlertTriangle size={18} className="text-orange-600" />
-        )}
-        <h3
-          className={`font-bold text-sm ${
-            isGood ? 'text-green-800' : 'text-orange-800'
-          }`}
-        >
-          鈣磷比分析 (Ca:P = 1:{analysis.ratio})
-        </h3>
-      </div>
-      <p className="text-xs text-gray-600 leading-relaxed">{analysis.advice}</p>
-    </section>
   );
 }
 
@@ -93,8 +71,18 @@ function IngredientList({ items }) {
             key={item.id}
             className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0"
           >
-            <span className="text-gray-700">{item.name}</span>
-            <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">
+            <span className="flex items-center gap-2 text-gray-700">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  item.recipeRole === 'protein'
+                    ? 'bg-orange-400'
+                    : 'bg-emerald-400'
+                }`}
+                aria-hidden
+              />
+              {item.name}
+            </span>
+            <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm font-mono">
               {item.amount}g
             </span>
           </li>

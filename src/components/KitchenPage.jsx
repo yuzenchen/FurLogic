@@ -43,6 +43,8 @@ export default function KitchenPage() {
     );
   }
 
+  const mealCalories = Math.round(metrics.der / MEALS_PER_DAY);
+
   return (
     <IngredientPicker
       selected={items}
@@ -51,6 +53,7 @@ export default function KitchenPage() {
       onGenerate={handleGenerate}
       isCalculating={isCalculating}
       petName={profile.name}
+      mealCalories={mealCalories}
     />
   );
 }
