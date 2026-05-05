@@ -1,13 +1,13 @@
 # FurLogic - 毛孩邏輯營養管理系統
 
-[![Deploy to Cloudflare Pages](https://github.com/yuzenchen/FurLogic/actions/workflows/deploy.yml/badge.svg)](https://github.com/yuzenchen/FurLogic/actions/workflows/deploy.yml)
+[![Deploy to GitHub Pages](https://github.com/yuzenchen/FurLogic/actions/workflows/deploy-gh-pages.yml/badge.svg)](https://github.com/yuzenchen/FurLogic/actions/workflows/deploy-gh-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 一個專為寵物主人設計的智能營養管理應用程式,協助您為毛孩打造健康均衡的鮮食餐。
 
 ## 🌐 線上 Demo
 
-訪問：[https://furlogic.pages.dev](https://furlogic.pages.dev)
+訪問：[https://yuzenchen.github.io/FurLogic/](https://yuzenchen.github.io/FurLogic/)
 
 ## 功能特色
 
@@ -38,16 +38,14 @@
 
 ### CI/CD
 - GitHub Actions 自動化部署
-- Cloudflare Pages 全球 CDN
-- 自動 Preview 部署（PR）
+- GitHub Pages 靜態託管
 
 ### 專案結構
 ```
 FurLogic/
 ├── .github/
-│   └── workflows/          # GitHub Actions 配置
-│       ├── deploy.yml      # 生產環境部署
-│       └── preview.yml     # PR 預覽部署
+│   └── workflows/                # GitHub Actions 配置
+│       └── deploy-gh-pages.yml   # GitHub Pages 部署
 ├── src/
 │   ├── components/         # React 元件
 │   │   ├── TabButton.jsx
@@ -91,40 +89,21 @@ npm run preview
 
 ## 部署
 
-### 自動部署（推薦）
+每次推送到 `main` 時，GitHub Actions 會自動建置並發布到 GitHub Pages。
 
-每次推送到 `main` 分支時，GitHub Actions 會自動：
-1. ✅ 安裝依賴
-2. ✅ 執行建置
-3. ✅ 部署到 Cloudflare Pages
-4. ✅ 更新線上版本
+### 一次性設定
 
-### 設定步驟
+1. **啟用 Pages**
+   - Repository → Settings → Pages
+   - Source 選 **GitHub Actions**
 
-1. **取得 Cloudflare API Token**
-   - 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
-   - 建立 Token，權限：`Cloudflare Pages:Edit`
+2. **首次推送 main 後**
+   - Actions 跑完即可在 `https://yuzenchen.github.io/FurLogic/` 看到網站
 
-2. **取得 Account ID**
-   - 前往 Cloudflare Dashboard
-   - 右側邊欄可以看到 Account ID
-
-3. **設定 GitHub Secrets**
-   - 前往 Repository → Settings → Secrets and variables → Actions
-   - 新增以下 secrets：
-     - `CLOUDFLARE_API_TOKEN`: 您的 API Token
-     - `CLOUDFLARE_ACCOUNT_ID`: 您的 Account ID
-
-4. **推送程式碼**
-   ```bash
-   git add .
-   git commit -m "啟用自動部署"
-   git push origin main
-   ```
-
-5. **查看部署狀態**
-   - 前往 Repository → Actions
-   - 查看工作流程執行狀態
+3. **(選用) 綁自訂 domain**
+   - Settings → Pages → Custom domain 填入網域
+   - 在 repo 根目錄新增 `CNAME` 檔(內容為網域)
+   - 編輯 `.github/workflows/deploy-gh-pages.yml`，移除 `VITE_BASE: /FurLogic/` 那一行(自訂 domain 服務於根路徑)
 
 ## 營養計算邏輯
 
