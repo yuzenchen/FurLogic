@@ -175,6 +175,47 @@ const computeMacros = (totalProtein, totalFat, totalCalories) => {
   };
 };
 
+/**
+ * 從「使用者親自指定的克數」直接累加,不做熱量分配。
+ * 這是拍照配餐流程的演算法 — 食材與份量都是已知的,只要算出
+ * 巨集 / 鈣磷比 / 補充品建議。
+ *
+ * @param {Array<{ food: object, grams: number }>} entries
+ * @returns 與 generateRecipe 相同形狀的結果
+ */
+export const generateRecipeFromPortions = (entries) => {
+  const items = [];
+  let totalCa = 0;
+  let totalP = 0;
+  let totalProtein = 0;
+  let totalFat = 0;
+  let totalCalories = 0;
+
+  entries.forEach(({ food, grams }) => {
+    if (!food || !Number.isFinite(grams) || grams <= 0) return;
+    const minerals = accumulateMineral(food, grams);
+    totalCa += minerals.ca;
+    totalP += minerals.p;
+    totalProtein += ((food.protein ?? 0) * grams) / 100;
+    totalFat += ((food.fat ?? 0) * grams) / 100;
+    totalCalories += (food.calories * grams) / 100;
+    items.push({ ...food, amount: Math.round(grams) });
+  });
+
+  const analysis = analyzeCaPRatio(totalCa, totalP);
+  const supplements = buildSupplements(analysis, totalCa, totalP);
+  const macros = computeMacros(totalProtein, totalFat, totalCalories);
+
+  return {
+    items,
+    calories: Math.round(totalCalories),
+    actualCalories: Math.round(totalCalories),
+    macros,
+    analysis,
+    supplements,
+  };
+};
+
 const buildSupplements = (analysis, totalCa, totalP) => {
   const list = [];
   if (analysis.status === 'low') {

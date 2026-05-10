@@ -6,6 +6,7 @@ import {
   calculateWaterNeed,
   analyzeCaPRatio,
   generateRecipe,
+  generateRecipeFromPortions,
 } from './nutritionCalculator';
 
 describe('calculateRER', () => {
@@ -118,5 +119,65 @@ describe('generateRecipe', () => {
     // No protein items → all 1000 kcal split between two plants (500 each)
     const oddItem = r.items.find((i) => i.id === oddCase.id);
     expect(oddItem.amount).toBe(500); // 500 kcal / 100 * 100 = 500g
+  });
+});
+
+describe('generateRecipeFromPortions', () => {
+  const chickenWithMacros = {
+    id: 1,
+    name: 'chicken',
+    type: 'protein',
+    recipeRole: 'protein',
+    calories: 100,
+    protein: 23,
+    fat: 1,
+    ca: 5,
+    p: 200,
+  };
+  const pumpkinWithMacros = {
+    id: 2,
+    name: 'pumpkin',
+    type: 'veg',
+    recipeRole: 'plant',
+    calories: 26,
+    protein: 1,
+    fat: 0.1,
+    ca: 21,
+    p: 44,
+  };
+
+  it('uses caller-supplied grams without re-allocating', () => {
+    const r = generateRecipeFromPortions([
+      { food: chickenWithMacros, grams: 100 },
+      { food: pumpkinWithMacros, grams: 50 },
+    ]);
+    expect(r.items.find((i) => i.name === 'chicken').amount).toBe(100);
+    expect(r.items.find((i) => i.name === 'pumpkin').amount).toBe(50);
+    // 100g chicken = 100 kcal + 50g pumpkin = 13 kcal → 113 kcal
+    expect(r.actualCalories).toBe(113);
+  });
+
+  it('drops invalid entries', () => {
+    const r = generateRecipeFromPortions([
+      { food: chickenWithMacros, grams: 50 },
+      { food: pumpkinWithMacros, grams: 0 },
+      { food: null, grams: 100 },
+      { food: chickenWithMacros, grams: NaN },
+    ]);
+    expect(r.items).toHaveLength(1);
+  });
+
+  it('computes Ca:P from real grams', () => {
+    // 100g chicken: 5mg Ca, 200mg P -> ratio 0.025 → low
+    const r = generateRecipeFromPortions([
+      { food: chickenWithMacros, grams: 100 },
+    ]);
+    expect(r.analysis.status).toBe('low');
+  });
+
+  it('returns 0 calories for empty input', () => {
+    const r = generateRecipeFromPortions([]);
+    expect(r.actualCalories).toBe(0);
+    expect(r.items).toHaveLength(0);
   });
 });

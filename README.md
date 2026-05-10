@@ -24,10 +24,13 @@
 - 食用警告與注意事項
 
 ### 👨‍🍳 AI 智能配餐
-- 根據選擇的食材自動計算份量
-- 鈣磷比例分析與建議
-- 營養補充品建議
-- 適合毛孩體重的客製化食譜
+有兩種流程:
+
+- **智能配餐**:點選冰箱有的食材,系統依毛孩 DER 自動分配份量(肉:蔬 = 7:3)。
+- **拍照配餐**:對著食材拍張照,AI 列出辨識到的條目,使用者手動填寫每項克數,系統依「實際克數」計算營養。
+  需在 `worker/` 部署 Cloudflare Worker 並設好 `VITE_VISION_WORKER_URL`,否則此流程降級為純手動。
+
+兩條路徑都會輸出鈣磷比視覺化、巨集分布、營養補充品建議。
 
 ## 技術架構
 
@@ -44,6 +47,10 @@
 ```
 FurLogic/
 ├── .github/workflows/deploy-gh-pages.yml
+├── worker/                          # Cloudflare Worker (Gemini vision proxy)
+│   ├── src/index.js
+│   ├── wrangler.toml
+│   └── README.md                    # 部署指南
 ├── src/
 │   ├── App.jsx                    # 容器:routing + layout
 │   ├── main.jsx
@@ -51,16 +58,21 @@ FurLogic/
 │   │   ├── HomePage.jsx           # 健康儀表板
 │   │   ├── SearchPage.jsx         # 食材知識庫
 │   │   ├── SettingsPage.jsx       # 毛孩檔案設定
-│   │   ├── KitchenPage.jsx        # 配餐容器
+│   │   ├── KitchenPage.jsx        # 配餐容器(智能 / 拍照雙模式)
 │   │   ├── TabButton.jsx
 │   │   └── kitchen/
+│   │       ├── CaPRatioGauge.jsx
 │   │       ├── IngredientPicker.jsx
+│   │       ├── MacroBars.jsx
+│   │       ├── PhotoCapture.jsx   # 拍照 / 上傳 + AI 觸發
+│   │       ├── PortionBuilder.jsx # 食材清單 + 克數輸入
 │   │       └── RecipeResult.jsx
 │   ├── context/PetContext.jsx     # 毛孩檔案 + 衍生指標 (Provider/usePet)
 │   ├── hooks/
 │   │   ├── usePersistentState.js  # localStorage 持久化的 useState
 │   │   ├── usePetMetrics.js       # RER/DER/活動係數/飲水量
-│   │   └── useKitchenIngredients.js
+│   │   ├── useKitchenIngredients.js
+│   │   └── useVisionWorker.js     # 對 Cloudflare Worker /analyze 的 client
 │   ├── data/foodDatabase.js
 │   ├── utils/
 │   │   ├── nutritionCalculator.js
