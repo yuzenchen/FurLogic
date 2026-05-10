@@ -37,9 +37,10 @@ jobs:
           # Repo-subpath base for github.io/<user>/FurLogic/.
           # When a custom domain (CNAME) is bound, remove this VITE_BASE line.
           VITE_BASE: /FurLogic/
-          # Vision Worker URL — set this in repo Settings → Secrets & variables
-          # → Actions → Variables as VISION_WORKER_URL once you've deployed
-          # worker/. If unset the photo flow falls back to manual-only mode.
+          # Vision proxy URL — once you deploy deno/ to Deno Deploy
+          # (see deno/README.md), copy the *.deno.dev URL into repo
+          # Settings → Secrets and variables → Actions → Variables as
+          # VISION_WORKER_URL. Leave unset to fall back to manual-only mode.
           VITE_VISION_WORKER_URL: ${{ vars.VISION_WORKER_URL }}
 
       - uses: actions/configure-pages@v5

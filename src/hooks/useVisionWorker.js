@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 
 /**
- * 包住對 Cloudflare Worker /analyze 的呼叫。
- * URL 從 build-time 的 VITE_VISION_WORKER_URL 取得 — 沒設代表沒部署 Worker,
+ * 包住對 vision proxy /analyze 的呼叫(目前部署在 Deno Deploy,見 deno/)。
+ * URL 從 build-time 的 VITE_VISION_WORKER_URL 取得 — 沒設代表沒部署服務,
  * isAvailable === false,UI 應該降級到「全手動」模式。
  */
 const WORKER_URL = import.meta.env.VITE_VISION_WORKER_URL || '';
