@@ -8,8 +8,10 @@ import {
   Search,
   ChevronLeft,
   Sparkles,
+  PlusCircle,
 } from 'lucide-react';
-import { FOOD_DATABASE } from '../../data/foodDatabase';
+import { FOOD_DATABASE, FOOD_TYPES } from '../../data/foodDatabase';
+import AdHocFoodForm from './AdHocFoodForm';
 
 /**
  * 已選食材清單 + 每項的克數輸入。
@@ -31,6 +33,8 @@ export default function PortionBuilder({
   onBack,
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  // adHocSeed:打開臨時食材表單時帶入的初始名稱
+  const [adHocSeed, setAdHocSeed] = useState(null); // null | string
 
   const totalGrams = useMemo(
     () => entries.reduce((s, e) => s + (Number(e.grams) || 0), 0),
@@ -73,6 +77,19 @@ export default function PortionBuilder({
     setShowPicker(false);
   };
 
+  const addAdHoc = (food) => {
+    onChange([...entries, { food, grams: 50 }]);
+    setAdHocSeed(null);
+    setShowPicker(false);
+  };
+
+  // 對應到資料庫的 suggestion 視為 known(可直接 chip 加入或已在 entries),
+  // 沒對應的視為 unknown,要走臨時食材流程。
+  const knownIds = new Set(FOOD_DATABASE.map((f) => f.id));
+  const unknownSuggestions = suggestions.filter(
+    (s) => s.id == null || !knownIds.has(s.id),
+  );
+
   const valid = entries.length > 0 && totalGrams > 0;
 
   return (
@@ -92,7 +109,13 @@ export default function PortionBuilder({
         確認 {entries.length > 0 ? '清單' : '加入食材'},並輸入每樣的克數。
       </p>
 
-      {suggestions.length > 0 && <SuggestionStrip suggestions={suggestions} />}
+      {suggestions.length > 0 && (
+        <SuggestionStrip
+          suggestions={suggestions}
+          unknownSuggestions={unknownSuggestions}
+          onAddAsAdHoc={(name) => setAdHocSeed(name)}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto -mx-5 px-5 mb-32">
         {entries.length === 0 ? (
@@ -150,7 +173,15 @@ export default function PortionBuilder({
         <FoodPickerSheet
           excluded={entries.map((e) => e.food.id)}
           onPick={add}
+          onAddAdHoc={() => setAdHocSeed('')}
           onClose={() => setShowPicker(false)}
+        />
+      )}
+      {adHocSeed != null && (
+        <AdHocFoodForm
+          initialName={adHocSeed}
+          onSubmit={addAdHoc}
+          onCancel={() => setAdHocSeed(null)}
         />
       )}
     </div>
@@ -218,30 +249,59 @@ function EntryRow({ entry, onGramsChange, onRemove }) {
   );
 }
 
-function SuggestionStrip({ suggestions }) {
+function SuggestionStrip({ suggestions, unknownSuggestions, onAddAsAdHoc }) {
+  const known = suggestions.filter((s) => !unknownSuggestions.includes(s));
   return (
-    <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3 mb-4 text-xs">
-      <p className="text-orange-700 font-bold flex items-center gap-1.5 mb-1.5">
+    <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3 mb-4 text-xs space-y-2">
+      <p className="text-orange-700 font-bold flex items-center gap-1.5">
         <Sparkles size={12} /> AI 認出 {suggestions.length} 項
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {suggestions.map((s, i) => (
-          <span
-            key={i}
-            className="bg-white text-orange-700 px-2 py-0.5 rounded-full border border-orange-200 inline-flex items-center gap-1"
-          >
-            {s.name}
-            <span className="text-orange-400 font-mono text-[10px]">
-              {Math.round((s.confidence ?? 0) * 100)}%
-            </span>
+        {unknownSuggestions.length > 0 && (
+          <span className="text-orange-400 font-normal">
+            · <span className="font-bold">{unknownSuggestions.length}</span>{' '}
+            項未收錄
           </span>
-        ))}
-      </div>
+        )}
+      </p>
+      {known.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {known.map((s, i) => (
+            <span
+              key={`k-${i}`}
+              className="bg-white text-orange-700 px-2 py-0.5 rounded-full border border-orange-200 inline-flex items-center gap-1"
+            >
+              {s.name}
+              <span className="text-orange-400 font-mono text-[10px]">
+                {Math.round((s.confidence ?? 0) * 100)}%
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {unknownSuggestions.length > 0 && (
+        <div>
+          <p className="text-amber-700 mb-1 leading-snug">
+            ⚠️ 下列食材資料庫沒收錄,點一下用估計值加入清單:
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {unknownSuggestions.map((s, i) => (
+              <button
+                key={`u-${i}`}
+                type="button"
+                onClick={() => onAddAsAdHoc(s.name)}
+                className="bg-white text-amber-700 px-2 py-0.5 rounded-full border border-amber-300 inline-flex items-center gap-1 hover:bg-amber-50 active:scale-95 transition"
+              >
+                <PlusCircle size={11} />
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function FoodPickerSheet({ excluded, onPick, onClose }) {
+function FoodPickerSheet({ excluded, onPick, onAddAdHoc, onClose }) {
   const [query, setQuery] = useState('');
   const term = query.trim().toLowerCase();
   const list = PICKABLE_FOODS.filter((f) => {
@@ -250,10 +310,19 @@ function FoodPickerSheet({ excluded, onPick, onClose }) {
     return f.name.toLowerCase().includes(term);
   });
 
+  // 依 type 分組顯示
+  const groups = Object.keys(FOOD_TYPES)
+    .map((type) => ({
+      type,
+      label: FOOD_TYPES[type],
+      items: list.filter((f) => f.type === type),
+    }))
+    .filter((g) => g.items.length > 0);
+
   return (
     <div className="absolute inset-0 z-40 bg-black/40 flex items-end animate-in fade-in duration-200">
       <div
-        className="bg-white w-full rounded-t-3xl p-5 max-h-[75%] flex flex-col animate-in slide-in-from-bottom duration-300"
+        className="bg-white w-full rounded-t-3xl p-5 max-h-[80%] flex flex-col animate-in slide-in-from-bottom duration-300"
         role="dialog"
         aria-label="新增食材"
       >
@@ -280,40 +349,65 @@ function FoodPickerSheet({ excluded, onPick, onClose }) {
           />
         </div>
 
+        <button
+          type="button"
+          onClick={onAddAdHoc}
+          className="w-full mb-3 py-2.5 border-2 border-dashed border-amber-300 bg-amber-50 text-amber-700 font-bold rounded-xl flex items-center justify-center gap-1.5 active:scale-[0.99] transition text-sm"
+        >
+          <PlusCircle size={14} />
+          找不到?新增臨時食材
+        </button>
+
         <div className="overflow-y-auto -mx-5 px-5 flex-1">
-          <ul className="grid grid-cols-2 gap-2">
-            {list.map((food) => {
-              const isProtein = food.recipeRole === 'protein';
-              return (
-                <li key={food.id}>
-                  <button
-                    type="button"
-                    onClick={() => onPick(food)}
-                    className="w-full text-left p-3 bg-white border border-gray-200 rounded-xl hover:border-orange-300 hover:shadow-sm active:scale-[0.98] transition"
-                  >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      {isProtein ? (
-                        <Drumstick size={12} className="text-orange-500" />
-                      ) : (
-                        <Leaf size={12} className="text-emerald-500" />
-                      )}
-                      <span className="font-bold text-gray-800 text-sm">
-                        {food.name}
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-gray-400 font-mono">
-                      {food.calories} kcal/100g
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-            {list.length === 0 && (
-              <li className="col-span-2 text-center text-gray-400 text-sm py-6">
-                沒有相符的食材
-              </li>
-            )}
-          </ul>
+          {groups.length === 0 && (
+            <p className="text-center text-gray-400 text-sm py-6">
+              沒有相符的食材 — 試試上面「新增臨時食材」
+            </p>
+          )}
+          <div className="space-y-4">
+            {groups.map(({ type, label, items }) => (
+              <section key={type}>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  {label}
+                </h4>
+                <ul className="grid grid-cols-2 gap-2">
+                  {items.map((food) => {
+                    const isProtein = food.recipeRole === 'protein';
+                    return (
+                      <li key={food.id}>
+                        <button
+                          type="button"
+                          onClick={() => onPick(food)}
+                          className={`w-full text-left p-3 bg-white border border-gray-200 rounded-xl hover:border-orange-300 hover:shadow-sm active:scale-[0.98] transition ${
+                            food.safety === 'caution'
+                              ? 'border-l-amber-300 border-l-4'
+                              : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            {isProtein ? (
+                              <Drumstick
+                                size={12}
+                                className="text-orange-500"
+                              />
+                            ) : (
+                              <Leaf size={12} className="text-emerald-500" />
+                            )}
+                            <span className="font-bold text-gray-800 text-sm">
+                              {food.name}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            {food.calories} kcal/100g
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         </div>
       </div>
     </div>

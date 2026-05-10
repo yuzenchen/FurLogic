@@ -4,8 +4,14 @@ import { FOOD_DATABASE, FOOD_TYPES } from '../../data/foodDatabase';
 
 const PICKER_FOODS = FOOD_DATABASE.filter((i) => i.recipeRole !== 'excluded');
 
-const labelFor = (item) =>
-  item.recipeRole === 'protein' ? FOOD_TYPES.protein : '蔬果';
+// 依顯示分類分組,並依 FOOD_TYPES 的鍵順序排列
+const PICKER_GROUPS = Object.keys(FOOD_TYPES)
+  .map((type) => ({
+    type,
+    label: FOOD_TYPES[type],
+    items: PICKER_FOODS.filter((f) => f.type === type),
+  }))
+  .filter((g) => g.items.length > 0);
 
 const RoleIcon = ({ item, size = 14 }) =>
   item.recipeRole === 'protein' ? (
@@ -60,38 +66,53 @@ export default function IngredientPicker({
         ) : null}
       </p>
 
-      <div className="flex-1 overflow-y-auto mb-32">
-        <div className="grid grid-cols-2 gap-3">
-          {PICKER_FOODS.map((item) => {
-            const active = isSelected(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onToggle(item)}
-                aria-pressed={active}
-                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative text-left active:scale-[0.98] ${
-                  active
-                    ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-orange-100 shadow-lg shadow-orange-200/50'
-                    : 'border-gray-100 bg-white hover:border-gray-300 hover:shadow-md'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <RoleIcon item={item} />
-                  <span className="font-bold text-gray-800">{item.name}</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>{labelFor(item)}</span>
-                  <span className="font-mono">{item.calories} kcal</span>
-                </div>
-                {active && (
-                  <div className="absolute top-2 right-2 bg-orange-500 text-white rounded-full p-0.5 shadow">
-                    <Check size={14} strokeWidth={3} />
-                  </div>
-                )}
-              </button>
-            );
-          })}
+      <div className="flex-1 overflow-y-auto mb-32 -mx-1 px-1">
+        <div className="space-y-5">
+          {PICKER_GROUPS.map(({ type, label, items }) => (
+            <section key={type}>
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-2">
+                <span>{label}</span>
+                <span className="flex-1 h-px bg-gray-200" />
+                <span className="text-gray-300">{items.length}</span>
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {items.map((item) => {
+                  const active = isSelected(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onToggle(item)}
+                      aria-pressed={active}
+                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative text-left active:scale-[0.98] ${
+                        active
+                          ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-orange-100 shadow-lg shadow-orange-200/50'
+                          : 'border-gray-100 bg-white hover:border-gray-300 hover:shadow-md'
+                      } ${item.safety === 'caution' ? 'border-l-amber-300 border-l-4' : ''}`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <RoleIcon item={item} />
+                        <span className="font-bold text-gray-800">
+                          {item.name}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span className="capitalize">
+                          {item.safety === 'caution' ? '⚠ 注意' : ''}
+                        </span>
+                        <span className="font-mono">{item.calories} kcal</span>
+                      </div>
+                      {active && (
+                        <div className="absolute top-2 right-2 bg-orange-500 text-white rounded-full p-0.5 shadow">
+                          <Check size={14} strokeWidth={3} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       </div>
 
