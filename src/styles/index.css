@@ -83,3 +83,66 @@
     opacity: 1;
   }
 }
+
+/* === FurLogic brand logo 動效 === */
+
+/* 掛載時:從 90% 縮放淡入,並有一次輕微回彈 */
+@keyframes furlogicLogoPop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 葉尖每 6 秒輕輕擺動一次,prefers-reduced-motion 時自動關閉 */
+@keyframes furlogicLeafSway {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0deg);
+  }
+  80% {
+    transform: rotate(-8deg);
+  }
+  90% {
+    transform: rotate(4deg);
+  }
+}
+
+.furlogic-logo {
+  display: inline-block;
+  animation: furlogicLogoPop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: transform 250ms ease;
+  filter: drop-shadow(0 4px 8px rgba(226, 111, 28, 0.25));
+}
+
+.furlogic-logo:hover {
+  transform: rotate(-3deg) scale(1.06);
+}
+
+.furlogic-logo__leaf {
+  transform-origin: 76px 24px; /* SVG userSpace,葉柄根部 */
+  transform-box: fill-box;
+  animation: furlogicLeafSway 6s ease-in-out 2s infinite;
+  transition: transform 250ms ease;
+}
+
+.furlogic-logo:hover .furlogic-logo__leaf {
+  animation-play-state: paused;
+  transform: rotate(-14deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .furlogic-logo,
+  .furlogic-logo__leaf {
+    animation: none !important;
+  }
+}

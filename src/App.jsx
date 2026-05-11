@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Activity, Search, ChefHat, Settings, ArrowLeft } from 'lucide-react';
 import TabButton from './components/TabButton';
+import Logo from './components/Logo';
 import SettingsPage from './components/SettingsPage';
 import HomePage from './components/HomePage';
 import SearchPage from './components/SearchPage';
@@ -44,9 +45,7 @@ function Shell() {
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 bg-gradient-to-br from-orange-400 to-red-500 rounded-xl flex items-center justify-center text-white font-bold shadow-orange-200 shadow-lg">
-                FL
-              </div>
+              <Logo size={36} />
               <h1 className="font-bold text-xl tracking-tight text-gray-800">
                 FurLogic
               </h1>
