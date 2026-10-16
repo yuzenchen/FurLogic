@@ -10,6 +10,7 @@ export default {
         sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
       },
       colors: {
+        cream: '#FAF7F2',
         orange: {
           50: '#fff7ed',
           100: '#ffedd5',

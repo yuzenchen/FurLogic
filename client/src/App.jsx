@@ -1,109 +1,86 @@
-import React, { useState } from 'react';
-import { Activity, Search, ChefHat, Settings, ArrowLeft } from 'lucide-react';
-import TabButton from './components/TabButton';
-import Logo from './components/Logo';
-import SettingsPage from './components/SettingsPage';
-import HomePage from './components/HomePage';
-import SearchPage from './components/SearchPage';
-import KitchenPage from './components/KitchenPage';
-import usePersistentState from './hooks/usePersistentState';
+import React from 'react';
+import TopBar from './components/shell/TopBar';
+import BottomNav from './components/shell/BottomNav';
+import LegacyImportBanner from './components/LegacyImportBanner';
+import { ErrorState, Spinner } from './components/ui';
+import { NavProvider, useNav } from './context/NavContext';
 import { PetProvider, usePet } from './context/PetContext';
-import { getActiveTab, saveActiveTab } from './utils/storage';
+import TodayPage from './pages/TodayPage';
+import HistoryPage from './pages/HistoryPage';
+import LogMealPage from './pages/LogMealPage';
+import FoodsPage from './pages/FoodsPage';
+import SettingsPage from './pages/SettingsPage';
+
+const PAGES = {
+  today: TodayPage,
+  history: HistoryPage,
+  log: LogMealPage,
+  foods: FoodsPage,
+};
 
 export default function FurLogicApp() {
   return (
-    <PetProvider>
-      <Shell />
-    </PetProvider>
+    <NavProvider>
+      <PetProvider>
+        <Shell />
+      </PetProvider>
+    </NavProvider>
   );
 }
 
 function Shell() {
-  const [activeTab, setActiveTab] = usePersistentState(
-    getActiveTab,
-    saveActiveTab,
-  );
-  const [showSettings, setShowSettings] = useState(false);
-  const { profile } = usePet();
+  const { tab, settingsOpen } = useNav();
 
   return (
-    <div className="max-w-md mx-auto bg-gray-50 h-[100dvh] flex flex-col font-sans text-gray-800 shadow-2xl relative overflow-hidden">
-      {/* 頂部導航 */}
-      <div className="bg-white px-5 py-4 shadow-sm z-20 flex justify-between items-center sticky top-0">
-        {showSettings ? (
-          <div className="flex items-center gap-2 w-full">
-            <button
-              type="button"
-              onClick={() => setShowSettings(false)}
-              aria-label="返回"
-              className="p-1 hover:bg-gray-100 rounded-full"
-            >
-              <ArrowLeft size={24} className="text-gray-600" />
-            </button>
-            <h1 className="font-bold text-lg text-gray-800">毛孩檔案設定</h1>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <Logo size={36} />
-              <h1 className="font-bold text-xl tracking-tight text-gray-800">
-                FurLogic
-              </h1>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowSettings(true)}
-              aria-label="開啟毛孩檔案設定"
-              className="flex items-center gap-2 bg-gray-100 pl-3 pr-2 py-1.5 rounded-full hover:bg-gray-200 transition"
-            >
-              <span className="text-sm font-bold text-gray-700">
-                {profile.name}
-              </span>
-              <Settings size={16} className="text-gray-500" />
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* 主要內容區 */}
-      <div className="flex-1 overflow-y-auto pb-24 scrollbar-hide">
-        {showSettings ? (
-          <SettingsPage onSave={() => setShowSettings(false)} />
-        ) : (
-          <>
-            {activeTab === 'home' && <HomePage onNavigate={setActiveTab} />}
-            {activeTab === 'search' && <SearchPage />}
-            {activeTab === 'kitchen' && <KitchenPage />}
-          </>
-        )}
-      </div>
-
-      {/* 底部導航欄 */}
-      {!showSettings && (
-        <div className="bg-white border-t border-gray-200 px-6 py-2 flex justify-between items-center absolute bottom-0 w-full z-30 pb-safe">
-          <TabButton
-            id="home"
-            label="健康"
-            icon={Activity}
-            activeTab={activeTab}
-            onClick={setActiveTab}
-          />
-          <TabButton
-            id="search"
-            label="查詢"
-            icon={Search}
-            activeTab={activeTab}
-            onClick={setActiveTab}
-          />
-          <TabButton
-            id="kitchen"
-            label="配餐"
-            icon={ChefHat}
-            activeTab={activeTab}
-            onClick={setActiveTab}
-          />
-        </div>
-      )}
+    <div className="relative mx-auto flex h-[100dvh] max-w-md flex-col overflow-hidden bg-cream text-stone-800">
+      <TopBar />
+      <main
+        key={settingsOpen ? 'settings' : tab}
+        className={
+          settingsOpen
+            ? 'flex-1 overflow-y-auto px-4 pt-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]'
+            : 'flex-1 overflow-y-auto px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))]'
+        }
+      >
+        <Content />
+      </main>
+      {!settingsOpen && <BottomNav />}
     </div>
+  );
+}
+
+function Content() {
+  const { tab, settingsOpen } = useNav();
+  const { pet, loading, error, refetch } = usePet();
+
+  // 只在還沒有資料時顯示整頁載入/錯誤(重新取得時保留畫面)
+  if (!pet && loading) {
+    return (
+      <div
+        role="status"
+        className="flex h-full flex-col items-center justify-center gap-3 text-stone-600"
+      >
+        <Spinner size={28} className="text-orange-500" />
+        <span className="text-sm">載入中…</span>
+      </div>
+    );
+  }
+  if (!pet) {
+    return (
+      <ErrorState
+        message={`請確認 API 是否啟動${error?.message ? `(${error.message})` : ''}`}
+        onRetry={refetch}
+      />
+    );
+  }
+
+  if (settingsOpen) return <SettingsPage />;
+
+  const Page = PAGES[tab] ?? TodayPage;
+  return (
+    <>
+      {tab === 'today' && <LegacyImportBanner />}
+      <Page />
+    </>
   );
 }
