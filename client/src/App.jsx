@@ -5,16 +5,12 @@ import LegacyImportBanner from './components/LegacyImportBanner';
 import { ErrorState, Spinner } from './components/ui';
 import { NavProvider, useNav } from './context/NavContext';
 import { PetProvider, usePet } from './context/PetContext';
-import TodayPage from './pages/TodayPage';
-import HistoryPage from './pages/HistoryPage';
-import LogMealPage from './pages/LogMealPage';
+import BatchPage from './pages/BatchPage';
 import FoodsPage from './pages/FoodsPage';
 import SettingsPage from './pages/SettingsPage';
 
 const PAGES = {
-  today: TodayPage,
-  history: HistoryPage,
-  log: LogMealPage,
+  batch: BatchPage,
   foods: FoodsPage,
 };
 
@@ -76,10 +72,10 @@ function Content() {
 
   if (settingsOpen) return <SettingsPage />;
 
-  const Page = PAGES[tab] ?? TodayPage;
+  const Page = PAGES[tab] ?? BatchPage;
   return (
     <>
-      {tab === 'today' && <LegacyImportBanner />}
+      {tab === 'batch' && <LegacyImportBanner />}
       <Page />
     </>
   );

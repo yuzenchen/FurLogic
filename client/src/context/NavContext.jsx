@@ -13,7 +13,7 @@ export function NavProvider({ children }) {
   const [tab, setTabState] = useState(getActiveTab);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  /** 切換分頁(today|history|log|foods),同時關閉設定頁 */
+  /** 切換分頁(batch|foods),同時關閉設定頁 */
   const setTab = useCallback((next) => {
     if (!TABS.includes(next)) return;
     setTabState(next);

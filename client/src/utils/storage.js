@@ -1,10 +1,13 @@
 /**
  * localStorage 小工具。所有存取都包 try/catch(無痕模式 / 停用儲存時不會壞掉)。
- * 毛孩資料、食材、餐點都存在 API,這裡只放 UI 偏好、記餐草稿與舊版資料遷移。
+ * 毛孩資料、食材都存在 API,這裡只放 UI 偏好、批次草稿與舊版資料遷移。
  */
 const KEYS = {
   ACTIVE_TAB: 'furlogic_active_tab',
-  MEAL_DRAFT: 'furlogic_meal_draft',
+  BATCH_DRAFT: 'furlogic_batch_draft',
+  // 已移除的單餐記錄草稿(載入時清掉);以片段組成,方便全域搜尋舊功能殘留
+  // 舊版單餐草稿,載入時清除
+  LEGACY_SINGLE_DRAFT: 'furlogic_meal_draft',
   IMPORT_DISMISSED: 'furlogic_import_dismissed',
   // 舊版(純前端)使用的 key
   LEGACY_PET_PROFILE: 'furlogic_pet_profile',
@@ -51,11 +54,19 @@ const isPlainObject = (v) =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
 // === 目前分頁 ===
-export const TABS = ['today', 'history', 'log', 'foods'];
-export const DEFAULT_TAB = 'today';
-const LEGACY_TAB_MAP = { home: 'today', search: 'foods', kitchen: 'log' };
+export const TABS = ['batch', 'foods'];
+export const DEFAULT_TAB = 'batch';
+/** 舊分頁值 → 新分頁(today/history/log 與更舊的 home/kitchen 都併入批次) */
+const LEGACY_TAB_MAP = {
+  today: 'batch',
+  history: 'batch',
+  log: 'batch',
+  home: 'batch',
+  kitchen: 'batch',
+  search: 'foods',
+};
 
-/** 讀目前分頁;舊值(home/search/kitchen)自動對應,無效值回預設 */
+/** 讀目前分頁;舊值自動對應(見 LEGACY_TAB_MAP),無效值回預設 */
 export const getActiveTab = () => {
   let value = readRaw(KEYS.ACTIVE_TAB);
   // 舊版以 JSON 字串存('"home"')
@@ -75,38 +86,42 @@ export const saveActiveTab = (tab) => {
   if (TABS.includes(tab)) writeRaw(KEYS.ACTIVE_TAB, tab);
 };
 
-// === 記餐草稿 ===
+// === 批次草稿 ===
 const isValidDraftItem = (item) =>
   isPlainObject(item) &&
   isPlainObject(item.food) &&
   typeof item.food.name === 'string' &&
   Number.isFinite(item.grams);
 
+const isValidServings = (n) => n === null || (Number.isInteger(n) && n >= 1);
+
 /**
- * @returns {{ label: string, items: Array<{ food: object, grams: number }> } | null}
+ * 讀批次草稿;順便清掉已停用的單餐草稿 key。格式不符回 null。
+ * @returns {{ servings: number|null, items: Array<{ food: object, grams: number }> } | null}
  */
-export const getMealDraft = () => {
-  const draft = readJson(KEYS.MEAL_DRAFT);
+export const getBatchDraft = () => {
+  removeRaw(KEYS.LEGACY_SINGLE_DRAFT);
+  const draft = readJson(KEYS.BATCH_DRAFT);
   if (
     !isPlainObject(draft) ||
-    typeof draft.label !== 'string' ||
+    !isValidServings(draft.servings ?? null) ||
     !Array.isArray(draft.items) ||
     !draft.items.every(isValidDraftItem)
   ) {
     return null;
   }
-  return { label: draft.label, items: draft.items };
+  return { servings: draft.servings ?? null, items: draft.items };
 };
 
-export const saveMealDraft = (draft) => {
+export const saveBatchDraft = (draft) => {
   try {
-    writeRaw(KEYS.MEAL_DRAFT, JSON.stringify(draft));
+    writeRaw(KEYS.BATCH_DRAFT, JSON.stringify(draft));
   } catch {
     // JSON 失敗(循環參照等)時略過
   }
 };
 
-export const clearMealDraft = () => removeRaw(KEYS.MEAL_DRAFT);
+export const clearBatchDraft = () => removeRaw(KEYS.BATCH_DRAFT);
 
 // === 舊版資料匯入 ===
 const ACTIVITY_LEVELS = ['low', 'normal', 'high'];

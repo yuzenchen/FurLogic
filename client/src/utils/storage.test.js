@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearLegacyData,
   getActiveTab,
-  getMealDraft,
+  getBatchDraft,
   readLegacyPetProfile,
   saveActiveTab,
-  saveMealDraft,
+  saveBatchDraft,
 } from './storage';
 
 const makeStorage = () => {
@@ -26,21 +26,25 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('active tab', () => {
-  it('defaults to today and migrates legacy values', () => {
-    expect(getActiveTab()).toBe('today');
-    storage.setItem('furlogic_active_tab', '"kitchen"');
-    expect(getActiveTab()).toBe('log');
+  it('defaults to batch and migrates legacy values', () => {
+    expect(getActiveTab()).toBe('batch');
+    for (const old of ['today', 'history', 'log', 'home', '"kitchen"']) {
+      storage.setItem('furlogic_active_tab', old);
+      expect(getActiveTab()).toBe('batch');
+    }
     storage.setItem('furlogic_active_tab', 'search');
     expect(getActiveTab()).toBe('foods');
+    storage.setItem('furlogic_active_tab', '"foods"');
+    expect(getActiveTab()).toBe('foods');
     storage.setItem('furlogic_active_tab', 'bogus');
-    expect(getActiveTab()).toBe('today');
+    expect(getActiveTab()).toBe('batch');
   });
 
   it('round-trips valid tabs and ignores invalid ones', () => {
+    saveActiveTab('foods');
+    expect(getActiveTab()).toBe('foods');
     saveActiveTab('history');
-    expect(getActiveTab()).toBe('history');
-    saveActiveTab('nope');
-    expect(getActiveTab()).toBe('history');
+    expect(getActiveTab()).toBe('foods');
   });
 
   it('survives a throwing localStorage', () => {
@@ -49,23 +53,37 @@ describe('active tab', () => {
         throw new Error('denied');
       },
     });
-    expect(getActiveTab()).toBe('today');
-    expect(() => saveActiveTab('log')).not.toThrow();
+    expect(getActiveTab()).toBe('batch');
+    expect(() => saveActiveTab('foods')).not.toThrow();
+    expect(getBatchDraft()).toBeNull();
   });
 });
 
-describe('meal draft', () => {
+describe('batch draft', () => {
   it('validates shape on read', () => {
     const draft = {
-      label: 'dinner',
-      items: [{ food: { id: 'chicken', name: '雞胸' }, grams: 120 }],
+      servings: 4,
+      items: [{ food: { id: 1, name: '雞胸' }, grams: 1000 }],
     };
-    saveMealDraft(draft);
-    expect(getMealDraft()).toEqual(draft);
-    storage.setItem('furlogic_meal_draft', '{"label":"x","items":[{}]}');
-    expect(getMealDraft()).toBeNull();
-    storage.setItem('furlogic_meal_draft', 'not json');
-    expect(getMealDraft()).toBeNull();
+    saveBatchDraft(draft);
+    expect(getBatchDraft()).toEqual(draft);
+    saveBatchDraft({ ...draft, servings: null });
+    expect(getBatchDraft().servings).toBeNull();
+    storage.setItem('furlogic_batch_draft', '{"items":[]}');
+    expect(getBatchDraft()).toEqual({ servings: null, items: [] });
+    storage.setItem('furlogic_batch_draft', '{"servings":0,"items":[]}');
+    expect(getBatchDraft()).toBeNull();
+    storage.setItem('furlogic_batch_draft', '{"servings":2,"items":[{}]}');
+    expect(getBatchDraft()).toBeNull();
+    storage.setItem('furlogic_batch_draft', 'not json');
+    expect(getBatchDraft()).toBeNull();
+  });
+
+  it('removes the old meal draft key on load', () => {
+    const oldKey = ['furlogic', 'meal', 'draft'].join('_');
+    storage.setItem(oldKey, '{"label":"dinner","items":[]}');
+    getBatchDraft();
+    expect(storage.map.has(oldKey)).toBe(false);
   });
 });
 

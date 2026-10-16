@@ -9,17 +9,13 @@ import foodRoutes from './routes/foods.js';
 import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
 import lookupRoutes from './routes/lookup.js';
-import mealRoutes from './routes/meals.js';
 import petRoutes from './routes/pets.js';
-import statsRoutes from './routes/stats.js';
 
 const API_ROUTES = [
   healthRoutes,
   petRoutes,
   foodRoutes,
   lookupRoutes, // POST /api/foods/lookup(限流 10 req/min/IP)
-  mealRoutes,
-  statsRoutes,
   importRoutes,
 ];
 

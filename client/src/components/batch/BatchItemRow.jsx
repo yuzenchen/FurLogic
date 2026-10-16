@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Drumstick, Leaf, Minus, Plus, Trash2 } from 'lucide-react';
 import { FOCUS_RING, cx } from '../ui';
+import { BUMP_STEP } from '../../utils/batchDraft';
 
 const ICON_BUTTON = cx(
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-700 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed',
@@ -10,10 +11,10 @@ const ICON_BUTTON = cx(
 const gramsText = (grams) => (grams > 0 ? String(grams) : '');
 
 /**
- * 草稿中的一項食材:圖示、名稱、每 100g 熱量、警語、克數調整、本項熱量。
+ * 整鍋中的一項食材:圖示、名稱、每 100g 熱量、警語、整鍋克數調整、本項熱量。
  * 輸入框保留使用者正在打的字串(例如「12.」),只在外部改變克數時同步。
  */
-export default function MealItemRow({ item, onSetGrams, onBump, onRemove }) {
+export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
   const { food, grams } = item;
   const [text, setText] = useState(() => gramsText(grams));
 
@@ -70,8 +71,8 @@ export default function MealItemRow({ item, onSetGrams, onBump, onRemove }) {
         <button
           type="button"
           className={ICON_BUTTON}
-          onClick={() => onBump(food.id, -10)}
-          aria-label={`${food.name} 減少 10 克`}
+          onClick={() => onBump(food.id, -BUMP_STEP)}
+          aria-label={`${food.name} 減少 ${BUMP_STEP} 克`}
           disabled={grams <= 0}
         >
           <Minus size={18} aria-hidden="true" />
@@ -83,7 +84,7 @@ export default function MealItemRow({ item, onSetGrams, onBump, onRemove }) {
           placeholder="0"
           onChange={handleChange}
           onBlur={() => setText(gramsText(grams))}
-          aria-label={`${food.name} 克數`}
+          aria-label={`${food.name} 整鍋克數`}
           className={cx(
             'h-11 w-20 rounded-xl border border-stone-300 bg-white px-3 text-right text-stone-900 tabular-nums',
             FOCUS_RING,
@@ -95,8 +96,8 @@ export default function MealItemRow({ item, onSetGrams, onBump, onRemove }) {
         <button
           type="button"
           className={ICON_BUTTON}
-          onClick={() => onBump(food.id, 10)}
-          aria-label={`${food.name} 增加 10 克`}
+          onClick={() => onBump(food.id, BUMP_STEP)}
+          aria-label={`${food.name} 增加 ${BUMP_STEP} 克`}
         >
           <Plus size={18} aria-hidden="true" />
         </button>

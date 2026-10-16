@@ -11,8 +11,8 @@ import { BottomSheet, Button, ErrorState, FOCUS_RING, cx } from '../ui';
 /**
  * 「加入食材」抽屜:搜尋資料庫 → 點選加入;找不到時可線上查詢或手動新增。
  * 新增食材的表單會暫時取代這個抽屜,取消後回到搜尋。父元件需要時才掛載。
- * @param {Set<number>} addedIds 已在草稿中的食材 id
- * @param {(food: object) => void} onAdd 加入草稿
+ * @param {Set<number>} addedIds 已在批次草稿中的食材 id
+ * @param {(food: object) => void} onAdd 加入批次草稿
  */
 export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
   const [query, setQuery] = useState('');
@@ -58,7 +58,7 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
   const handleSaved = (food) => {
     if (food.safety === 'toxic') {
       setForm(null);
-      setMessage(`已將「${food.name}」存入食材庫(對狗有毒,未加入餐點)`);
+      setMessage(`已將「${food.name}」存入食材庫(對狗有毒,未加入批次)`);
       refetch();
       return;
     }
@@ -164,7 +164,7 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
           initial={form.initial}
           confidence={form.confidence}
           notice={form.notice}
-          context="log"
+          context="batch"
           onClose={() => setForm(null)}
           onSaved={handleSaved}
         />

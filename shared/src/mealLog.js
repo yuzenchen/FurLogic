@@ -1,5 +1,5 @@
 /**
- * 餐點紀錄相關的純函式(前後端共用,可單元測試)
+ * 餐點營養分析與熱量目標的純函式(前後端共用,可單元測試)
  */
 import {
   analyzeCaPRatio,
@@ -10,26 +10,6 @@ import {
   DEFAULT_MEALS_PER_DAY,
   MEAT_CALORIE_RATIO,
 } from './nutritionConstants.js';
-
-// === 餐別 ===
-export const MEAL_LABELS = {
-  breakfast: '早餐',
-  lunch: '午餐',
-  dinner: '晚餐',
-  snack: '點心',
-};
-
-/**
- * 依當地時間推測預設餐別。
- * 04:00–10:59 早餐 / 11:00–14:59 午餐 / 15:00–20:59 晚餐 / 其餘 點心
- */
-export const defaultMealLabel = (date = new Date()) => {
-  const h = date.getHours();
-  if (h >= 4 && h < 11) return 'breakfast';
-  if (h >= 11 && h < 15) return 'lunch';
-  if (h >= 15 && h < 21) return 'dinner';
-  return 'snack';
-};
 
 // === 每餐目標熱量 ===
 const MIN_MEALS_PER_DAY = 1;
@@ -86,13 +66,6 @@ const roundTotals = (sum) => ({
 });
 
 /**
- * 顯示/儲存用的四捨五入總計:
- * calories、ca、p 取整數;protein、fat、grams 取 1 位小數。
- */
-export const computeMealTotals = (items = []) =>
-  roundTotals(computeIntake(items));
-
-/**
  * 完整餐點分析:總計(四捨五入)、巨集營養素、鈣磷比、補充品建議。
  * 巨集與鈣磷比皆以未四捨五入的累計值計算。
  */
@@ -140,75 +113,6 @@ export const allocatePortionsForTarget = (foods = [], target = 0) => {
   });
 };
 
-// === 日期工具 ===
-const pad2 = (n) => String(n).padStart(2, '0');
-
-const DATE_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const ISO_WITH_OFFSET_RE =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
-
-const isRealDate = (y, m, d) => {
-  const t = new Date(Date.UTC(y, m - 1, d));
-  return (
-    t.getUTCFullYear() === y &&
-    t.getUTCMonth() === m - 1 &&
-    t.getUTCDate() === d
-  );
-};
-
-/**
- * 轉成日期鍵 'YYYY-MM-DD'。
- * - Date:取「執行環境當地」的日曆日期
- * - 帶時區(Z / ±HH:MM)的 ISO 字串:取該時區下牆上時鐘的日期(即字串所寫的日期)
- * - 'YYYY-MM-DD':原樣回傳
- * 其他(含無時區的日期時間字串)一律拋錯。
- */
-export const toDateKey = (input) => {
-  if (input instanceof Date) {
-    if (Number.isNaN(input.getTime())) throw new Error('Invalid date');
-    return `${input.getFullYear()}-${pad2(input.getMonth() + 1)}-${pad2(input.getDate())}`;
-  }
-  if (typeof input === 'string') {
-    const m = DATE_KEY_RE.exec(input) || ISO_WITH_OFFSET_RE.exec(input);
-    if (m) {
-      const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-      const timeOk =
-        m[4] === undefined ||
-        (Number(m[4]) < 24 &&
-          Number(m[5]) < 60 &&
-          (m[6] === undefined || Number(m[6]) < 60));
-      if (isRealDate(y, mo, d) && timeOk) return `${m[1]}-${m[2]}-${m[3]}`;
-    }
-  }
-  throw new Error(`Invalid date input: ${String(input)}`);
-};
-
-/**
- * 'YYYY-MM-DDTHH:mm:ss+HH:MM',使用執行環境的當地時區偏移。
- */
-export const toLocalIsoString = (date = new Date()) => {
-  const offsetMin = -date.getTimezoneOffset();
-  const sign = offsetMin >= 0 ? '+' : '-';
-  const abs = Math.abs(offsetMin);
-  return (
-    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}` +
-    `T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}` +
-    `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`
-  );
-};
-
-/**
- * 日期鍵加減天數(純 UTC 運算,不受 DST/時區影響)。
- */
-export const addDays = (dateKey, n) => {
-  const m = DATE_KEY_RE.exec(dateKey);
-  if (!m) throw new Error(`Invalid date key: ${String(dateKey)}`);
-  const t = new Date(
-    Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + n),
-  );
-  return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}-${pad2(t.getUTCDate())}`;
-};
-
 // === 每日達標狀態 ===
 export const DAILY_STATUS_LABELS = {
   under: '不足',
@@ -226,34 +130,4 @@ export const dailyStatus = (intake, der) => {
   if (ratio < 0.9) status = 'under';
   else if (ratio > 1.1) status = 'over';
   return { ratio, status };
-};
-
-/**
- * 產生以 endDateKey 結尾、共 days 天的遞增序列,缺資料的日子補 0。
- * @param {Array<{dateKey: string, calories?: number, count?: number}>} rows
- * @returns {Array<{dateKey: string, calories: number, count: number}>}
- */
-export const fillDailySeries = (rows = [], endDateKey, days) => {
-  const byKey = new Map();
-  rows.forEach((row) => {
-    if (!row || !row.dateKey) return;
-    const prev = byKey.get(row.dateKey) ?? { calories: 0, count: 0 };
-    byKey.set(row.dateKey, {
-      calories: prev.calories + (row.calories ?? 0),
-      count: prev.count + (row.count ?? 0),
-    });
-  });
-
-  const n = Math.max(0, Math.floor(days));
-  const series = [];
-  for (let i = n - 1; i >= 0; i -= 1) {
-    const dateKey = addDays(endDateKey, -i);
-    const hit = byKey.get(dateKey);
-    series.push({
-      dateKey,
-      calories: hit ? hit.calories : 0,
-      count: hit ? hit.count : 0,
-    });
-  }
-  return series;
 };

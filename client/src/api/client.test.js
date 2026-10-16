@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, deleteMeal, getPets, listFoods, updatePet } from './client';
+import { ApiError, deleteFood, getPets, listFoods, updatePet } from './client';
 
 const mockFetch = (impl) => {
   const fn = vi.fn(impl);
@@ -33,7 +33,7 @@ describe('api client', () => {
 
   it('returns null for 204', async () => {
     mockFetch(async () => new Response(null, { status: 204 }));
-    await expect(deleteMeal('m1')).resolves.toBeNull();
+    await expect(deleteFood(7)).resolves.toBeNull();
   });
 
   it('throws ApiError with server code and message', async () => {

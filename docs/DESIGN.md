@@ -12,7 +12,7 @@
   - 達標 met:`emerald-700` 文字、`emerald-50` 底、圖示 `Check`
   - 超過 over:`rose-700` 文字、`rose-50` 底、圖示 `ArrowUp`
 - 圓角:卡片 `rounded-2xl`,按鈕/輸入 `rounded-xl`,膠囊 `rounded-full`。
-- 陰影:只用 `shadow-sm`;移除大部分漸層與重陰影。**唯一視覺重點是今日頁環狀圖**。
+- 陰影:只用 `shadow-sm`;移除大部分漸層與重陰影。**唯一視覺重點是批次頁的「每份結果」卡**(白卡內 `orange-50` 面板,不用漸層)。
 - 數字一律 `tabular-nums`。
 - 觸控目標 ≥ 44px(`h-11`/`min-h-11`、`w-11`)。
 - 焦點:可互動元素 `focus-visible:ring-2 ring-orange-500 ring-offset-2 ring-offset-cream`。
@@ -34,15 +34,33 @@
 
 ## App 外殼
 - 頂部列(白底、底線 `stone-200`,高 56px):左 `Logo`(32px,沿用現有元件與動畫)+「FurLogic」;右側毛孩膠囊按鈕(名字 + Settings 圖示)→ 設定頁(全頁,左上返回)。
-- 底部導覽固定,5 格等寬:`今日(Home)` `紀錄(BarChart3)` **`記餐`** `食材(Apple 或 Carrot)` `毛孩(PawPrint)`。
-  - 中央「記餐」為突起主按鈕:直徑 56px 圓形 `bg-orange-700 text-white`,`-mt-6` 浮出,`ring-4 ring-cream`,圖示 `Plus`,下方文字「記餐」。
+- 底部導覽固定,3 格等寬:`食材(Apple)` **`批次`** `毛孩(PawPrint)`。
+  - 中央「批次」為突起主按鈕:直徑 56px 圓形 `bg-orange-700 text-white`,`-mt-6` 浮出,`ring-4 ring-cream`,圖示 `ChefHat`,下方文字「批次」。
   - 其餘分頁:圖示 22px + 11px 文字;選中 `text-orange-700` 且有 `aria-current="page"`,未選 `stone-600`。
   - 「毛孩」開啟設定頁(與頂部入口相同)。
 - 內容區底部留出導覽高度 + safe-area。
-- 目前分頁存 localStorage(`furlogic_active_tab`)。分頁值:`today` | `history` | `log` | `foods`。
+- 目前分頁存 localStorage(`furlogic_active_tab`)。分頁值:`batch`(預設)| `foods`。舊值 `today` / `history` / `log` / `home` / `kitchen` 讀取時轉成 `batch`,`search` 轉成 `foods`。
 - 導覽狀態用 `NavContext`(`useNav()` → `{ tab, setTab, openSettings }`)。
+- 舊版資料匯入提示(`LegacyImportBanner`)顯示在批次分頁頂端。
 
 ## 頁面
-詳見各任務 brief;共通原則:
+共通原則:
 - 讀取中顯示骨架或「載入中…」,API 失敗顯示 `ErrorState` + 重試。
-- 營養數值旁註明「生食基準,建議以生重秤量」(記餐頁一次即可)。
+- 營養數值旁註明生食基準(批次頁一次即可)。
+- 已移除單餐記錄、今日頁與歷史頁;伺服器只存毛孩與食材。
+
+### 批次製作 `pages/BatchPage.jsx`(分頁 `batch`)
+整鍋鮮食分份計算器,**不存伺服器**。草稿存 localStorage `furlogic_batch_draft`,形狀 `{ servings: number|null, items: [{ food, grams }] }`(`grams` 為整鍋生重;`servings` 為 null 時採建議份數)。計算用 shared `planBatch` / `allocateBatchForServings`;份數純粹依數量平分(不輸入熟重)。
+1. `PageHeader`「批次製作」/「輸入整鍋食材的生重,算出可分幾份」;有食材時右上 ghost「清空」(兩段式確認)。
+2. 提示列(Info 圖示):「營養數值為生食基準,請輸入下鍋前的生重」。
+3. 「整鍋食材」卡:每項 `BatchItemRow`(角色圖示、名稱、kcal/100g、注意警語;−50 / 克數輸入 / +50 / 移除;右側本項 kcal);卡底「整鍋合計 {g} g · {kcal} kcal」。空狀態 `EmptyState`(Utensils)「還沒加入食材」+「加入食材」。
+4. 動作列:secondary「加入食材」、secondary「依份數自動配量」(Wand2;無食材或無單餐目標時停用),下方 `text-xs stone-600`「依 {N} 份 × 單餐 {目標} kcal 計算各食材總重」。
+5. 「份數」卡:步進器(− [N] +,範圍 1–60,按鈕 44px,中間數字輸入);「建議 {n} 份(依單餐目標 {目標} kcal)」,份數與建議不同時顯示 ghost「套用建議」;「約可吃 {天數} 天(每日 {餐數} 餐)」。
+6. 每份結果卡(唯一視覺重點):白卡 + `orange-50` 內層面板;「每份 {kcal} kcal」(數字 `text-4xl font-bold tabular-nums`)、「/ 單餐目標 {目標} kcal」、`StatusBadge`(與每日相同 90–110% 規則)+「比目標少 X kcal」/「接近目標」/「比目標多 X kcal」、「每份生重約 {g} g(整鍋 ÷ {N})」;面板下方「每份含」列出各食材每份克數。
+7. `MealAnalysisCard`「每份營養」:統計、鈣磷比量表、巨量營養素;建議補充中克數類(蛋殼粉)顯示「整鍋加 X・每份 Y」,按顆計的魚油只顯示「每份 1 顆」。
+
+### 食材 `pages/FoodsPage.jsx`(分頁 `foods`)
+搜尋、篩選、自訂食材新增/編輯/刪除。卡片「加入批次」把食材加入批次草稿並切到 `batch` 分頁。`FoodSearchSheet` / `FoodFormSheet` 在 `context="batch"` 時「儲存並加入」會加入批次草稿(有毒食材只存入食材庫)。
+
+### 毛孩檔案 `pages/SettingsPage.jsx`
+由頂部膠囊或底部「毛孩」開啟。單餐目標 = DER ÷ 每日餐數,批次頁以此計算建議份數與自動配量。

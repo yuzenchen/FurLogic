@@ -88,17 +88,3 @@ export const deleteFood = (id, opts) =>
 /** → { draft, confidence, cached } */
 export const lookupFood = (query, opts) =>
   apiFetch('/foods/lookup', { ...opts, method: 'POST', body: { query } });
-
-// === Meals ===
-export const listMeals = ({ petId, from, to } = {}, opts) =>
-  apiFetch(`/meals${buildQuery({ petId, from, to })}`, opts);
-/** meal: { petId, label, eatenAt?, note?, items: [...] } */
-export const createMeal = (meal, opts) =>
-  apiFetch('/meals', { ...opts, method: 'POST', body: meal });
-export const deleteMeal = (id, opts) =>
-  apiFetch(`/meals/${enc(id)}`, { ...opts, method: 'DELETE' });
-
-// === Stats ===
-/** → [{ dateKey, calories, count }] 由舊到新 */
-export const getDailyStats = ({ petId, days, today } = {}, opts) =>
-  apiFetch(`/stats/daily${buildQuery({ petId, days, today })}`, opts);

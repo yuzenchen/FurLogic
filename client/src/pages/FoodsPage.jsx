@@ -14,7 +14,7 @@ import {
 } from '../components/ui';
 import { useNav } from '../context/NavContext';
 import useFoods from '../hooks/useFoods';
-import useMealDraft from '../hooks/useMealDraft';
+import useBatchDraft from '../hooks/useBatchDraft';
 
 const FILTERS = [
   { key: 'all', label: '全部' },
@@ -28,7 +28,7 @@ const FILTERS = [
 /** 食材資料庫:搜尋、篩選、自訂食材的新增/編輯/刪除 */
 export default function FoodsPage() {
   const { setTab } = useNav();
-  const { addFood } = useMealDraft();
+  const { addFood } = useBatchDraft();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [form, setForm] = useState(null); // { mode, initial }
@@ -50,7 +50,7 @@ export default function FoodsPage() {
 
   const handleAdd = (food) => {
     addFood(food);
-    setTab('log');
+    setTab('batch');
   };
 
   const handleDelete = async (food) => {

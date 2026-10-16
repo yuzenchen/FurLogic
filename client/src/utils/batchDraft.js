@@ -1,16 +1,13 @@
 /**
- * 記餐草稿的純函式:reducer、食材快照與送出 payload。
- * 草稿形狀 { label, items: [{ food, grams }] }(與 utils/storage 的驗證一致)。
+ * 批次草稿的純函式:reducer 與食材快照。
+ * 草稿形狀 { servings: number|null, items: [{ food, grams }] }(與 utils/storage 的驗證一致)。
+ * servings 為 null 時使用建議份數;grams 為整鍋生重。
  */
-import {
-  MEAL_LABELS,
-  allocatePortionsForTarget,
-  defaultMealLabel,
-  toLocalIsoString,
-} from '@furlogic/shared';
+import { allocateBatchForServings } from '@furlogic/shared';
 
-const RECIPE_ROLES = ['protein', 'plant', 'excluded'];
-const BUMP_STEP = 10;
+export const BUMP_STEP = 50;
+export const MIN_SERVINGS = 1;
+export const MAX_SERVINGS = 60;
 
 /** 食材快照保留的欄位 */
 const SNAPSHOT_KEYS = [
@@ -28,10 +25,7 @@ const SNAPSHOT_KEYS = [
   'source',
 ];
 
-export const emptyMealDraft = (now = new Date()) => ({
-  label: defaultMealLabel(now),
-  items: [],
-});
+export const emptyBatchDraft = () => ({ servings: null, items: [] });
 
 /** 只保留草稿需要的食材欄位(避免把 description 等大欄位存進 localStorage) */
 export const snapshotFood = (food) => {
@@ -49,6 +43,14 @@ const toGrams = (value) => {
   return Math.round(n * 10) / 10;
 };
 
+/** 份數正規化:null/空字串 → null(用建議);其餘取整數並限制在 1–60 */
+export const toServings = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(MAX_SERVINGS, Math.max(MIN_SERVINGS, Math.round(n)));
+};
+
 const sameId = (a, b) => a !== undefined && a !== null && a === b;
 
 const mapItem = (state, id, fn) => ({
@@ -60,20 +62,20 @@ const mapItem = (state, id, fn) => ({
 
 /**
  * actions:
- * - { type: 'setLabel', label }
- * - { type: 'addFood', food }        重複 id 或有毒食材不加入;預設 0 克
+ * - { type: 'setServings', servings }   整數 1–60;null 表示使用建議份數
+ * - { type: 'addFood', food }           重複 id 或有毒食材不加入;預設 0 克
  * - { type: 'removeFood', id }
- * - { type: 'setGrams', id, grams }  ≥ 0;NaN → 0
- * - { type: 'bump', id, delta }      delta 為正 → +10,負 → −10,下限 0
- * - { type: 'applyAllocation', target }
- * - { type: 'clear', label? }        label 省略時依目前時間推測
+ * - { type: 'setGrams', id, grams }     ≥ 0;NaN → 0
+ * - { type: 'bump', id, delta }         delta 為正 → +50,負 → −50,下限 0
+ * - { type: 'applyAllocation', servings, mealTarget }  依份數 × 單餐目標配量
+ * - { type: 'clear' }
  */
-export function mealDraftReducer(state, action) {
+export function batchDraftReducer(state, action) {
   switch (action?.type) {
-    case 'setLabel':
-      return MEAL_LABELS[action.label]
-        ? { ...state, label: action.label }
-        : state;
+    case 'setServings': {
+      const servings = toServings(action.servings);
+      return servings === state.servings ? state : { ...state, servings };
+    }
     case 'addFood': {
       const { food } = action;
       if (!food || typeof food.name !== 'string') return state;
@@ -101,9 +103,10 @@ export function mealDraftReducer(state, action) {
       return mapItem(state, action.id, (g) => toGrams(g + step));
     }
     case 'applyAllocation': {
-      const allocated = allocatePortionsForTarget(
+      const allocated = allocateBatchForServings(
         state.items.map((item) => item.food),
-        Number(action.target) || 0,
+        toServings(action.servings) ?? MIN_SERVINGS,
+        Number(action.mealTarget) || 0,
       );
       return {
         ...state,
@@ -114,50 +117,12 @@ export function mealDraftReducer(state, action) {
       };
     }
     case 'clear':
-      return {
-        label: MEAL_LABELS[action.label] ? action.label : defaultMealLabel(),
-        items: [],
-      };
+      return emptyBatchDraft();
     default:
       return state;
   }
 }
 
-/** 草稿 items 攤平成 shared analyzeMeal / computeIntake 用的形狀 */
+/** 草稿 items 攤平成 shared planBatch / analyzeMeal 用的形狀 */
 export const flattenDraftItems = (items = []) =>
   items.map(({ food, grams }) => ({ ...food, grams }));
-
-const nutrient = (v) => (Number.isFinite(v) && v > 0 ? v : 0);
-
-/**
- * POST /api/meals 的 body。只送 grams > 0 的項目,且每項只含伺服器接受的欄位。
- */
-export function buildMealPayload({
-  petId,
-  label,
-  items = [],
-  now = new Date(),
-}) {
-  return {
-    petId,
-    label,
-    eatenAt: toLocalIsoString(now),
-    items: items
-      .filter((item) => Number.isFinite(item.grams) && item.grams > 0)
-      .map(({ food, grams }) => {
-        const out = {};
-        if (Number.isInteger(food.id) && food.id > 0) out.foodId = food.id;
-        out.name = food.name;
-        out.recipeRole = RECIPE_ROLES.includes(food.recipeRole)
-          ? food.recipeRole
-          : 'plant';
-        out.calories = nutrient(food.calories);
-        out.protein = nutrient(food.protein);
-        out.fat = nutrient(food.fat);
-        out.ca = nutrient(food.ca);
-        out.p = nutrient(food.p);
-        out.grams = grams;
-        return out;
-      }),
-  };
-}

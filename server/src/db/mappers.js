@@ -73,35 +73,3 @@ export const pickColumns = (body, fieldToColumn) => {
   });
   return out;
 };
-
-export const mealItemFromRow = (row) => ({
-  id: row.id,
-  foodId: row.food_id,
-  name: row.name,
-  recipeRole: row.recipe_role,
-  calories: row.calories,
-  protein: row.protein,
-  fat: row.fat,
-  ca: row.ca,
-  p: row.p,
-  grams: row.grams,
-});
-
-export const mealFromRow = (row, itemRows = []) => ({
-  id: row.id,
-  petId: row.pet_id,
-  dateKey: row.date_key,
-  eatenAt: row.eaten_at,
-  label: row.label,
-  note: row.note,
-  totals: {
-    calories: row.total_calories,
-    protein: row.total_protein,
-    fat: row.total_fat,
-    ca: row.total_ca,
-    p: row.total_p,
-    grams: row.total_grams,
-  },
-  items: itemRows.map(mealItemFromRow),
-  createdAt: row.created_at,
-});

@@ -1,18 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MEAL_LABELS,
-  defaultMealLabel,
   mealTargetCalories,
   computeIntake,
-  computeMealTotals,
   analyzeMeal,
   allocatePortionsForTarget,
-  toDateKey,
-  toLocalIsoString,
-  addDays,
   dailyStatus,
   DAILY_STATUS_LABELS,
-  fillDailySeries,
 } from './mealLog.js';
 import {
   calculateRER,
@@ -32,41 +25,20 @@ const asItem = (food, grams) => ({
   grams,
 });
 
+const totalsOf = (items) => analyzeMeal(items).totals;
+
 describe('index re-exports', () => {
   it('exposes calculator, constants, food db and meal log', () => {
     expect(typeof shared.generateRecipe).toBe('function');
     expect(typeof shared.computeMacros).toBe('function');
     expect(typeof shared.buildSupplements).toBe('function');
     expect(typeof shared.analyzeMeal).toBe('function');
+    expect(typeof shared.planBatch).toBe('function');
+    expect(shared.toDateKey).toBeUndefined();
+    expect(shared.MEAL_LABELS).toBeUndefined();
     expect(shared.FOOD_DATABASE).toHaveLength(37);
     expect(shared.MEALS_PER_DAY).toBe(2);
     expect(shared.DEFAULT_MEALS_PER_DAY).toBe(2);
-  });
-});
-
-describe('MEAL_LABELS / defaultMealLabel', () => {
-  it('has Chinese labels', () => {
-    expect(MEAL_LABELS).toEqual({
-      breakfast: '早餐',
-      lunch: '午餐',
-      dinner: '晚餐',
-      snack: '點心',
-    });
-  });
-
-  const at = (h, m) => new Date(2026, 9, 16, h, m, 0);
-  it.each([
-    [3, 59, 'snack'],
-    [4, 0, 'breakfast'],
-    [10, 59, 'breakfast'],
-    [11, 0, 'lunch'],
-    [14, 59, 'lunch'],
-    [15, 0, 'dinner'],
-    [20, 59, 'dinner'],
-    [21, 0, 'snack'],
-    [0, 0, 'snack'],
-  ])('%i:%i -> %s', (h, m, expected) => {
-    expect(defaultMealLabel(at(h, m))).toBe(expected);
   });
 });
 
@@ -95,17 +67,14 @@ describe('mealTargetCalories', () => {
   });
 });
 
-describe('computeIntake / computeMealTotals', () => {
+describe('computeIntake / analyzeMeal totals', () => {
   const chicken = getFoodById(1);
   const sweetPotato = getFoodById(5);
 
   it('雞胸肉 200 g + 地瓜 80 g -> 279 kcal', () => {
     expect(chicken.name).toBe('雞胸肉');
     expect(sweetPotato.name).toBe('地瓜');
-    const totals = computeMealTotals([
-      asItem(chicken, 200),
-      asItem(sweetPotato, 80),
-    ]);
+    const totals = totalsOf([asItem(chicken, 200), asItem(sweetPotato, 80)]);
     expect(totals.calories).toBe(279);
     expect(totals.grams).toBe(280);
     expect(totals.protein).toBeCloseTo(47.3, 5); // 46 + 1.28
@@ -134,7 +103,7 @@ describe('computeIntake / computeMealTotals', () => {
   });
 
   it('empty input -> zeros', () => {
-    expect(computeMealTotals([])).toEqual({
+    expect(totalsOf([])).toEqual({
       calories: 0,
       protein: 0,
       fat: 0,
@@ -216,54 +185,6 @@ describe('allocatePortionsForTarget', () => {
   });
 });
 
-describe('toDateKey', () => {
-  it('uses the local calendar date of a Date', () => {
-    expect(toDateKey(new Date(2026, 9, 16, 23, 59))).toBe('2026-10-16');
-    expect(toDateKey(new Date(2026, 0, 1, 0, 0))).toBe('2026-01-01');
-  });
-
-  it('uses the wall-clock date of an explicit offset', () => {
-    expect(toDateKey('2026-10-16T23:30:00+08:00')).toBe('2026-10-16');
-    expect(toDateKey('2026-10-17T00:30:00+08:00')).toBe('2026-10-17');
-    expect(toDateKey('2026-10-16T20:00:00-05:00')).toBe('2026-10-16');
-    expect(toDateKey('2026-10-16T20:00:00Z')).toBe('2026-10-16');
-    expect(toDateKey('2026-10-16T20:00:00.123Z')).toBe('2026-10-16');
-  });
-
-  it('returns plain date keys as-is', () => {
-    expect(toDateKey('2026-02-28')).toBe('2026-02-28');
-  });
-
-  it('throws on invalid input', () => {
-    expect(() => toDateKey('2026-02-30')).toThrow();
-    expect(() => toDateKey('not a date')).toThrow();
-    expect(() => toDateKey('2026-10-16T25:00:00Z')).toThrow();
-    expect(() => toDateKey(new Date('nope'))).toThrow();
-    expect(() => toDateKey(undefined)).toThrow();
-    expect(() => toDateKey(1234)).toThrow();
-  });
-});
-
-describe('toLocalIsoString', () => {
-  it('formats with the local offset and round-trips', () => {
-    const d = new Date(2026, 9, 16, 23, 5, 9);
-    const s = toLocalIsoString(d);
-    expect(s).toMatch(/^2026-10-16T23:05:09[+-]\d{2}:\d{2}$/);
-    expect(new Date(s).getTime()).toBe(d.getTime());
-    expect(toDateKey(s)).toBe(toDateKey(d));
-  });
-});
-
-describe('addDays', () => {
-  it('crosses month and year boundaries', () => {
-    expect(addDays('2026-10-31', 1)).toBe('2026-11-01');
-    expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
-    expect(addDays('2024-03-01', -1)).toBe('2024-02-29');
-    expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
-    expect(addDays('2026-10-16', 0)).toBe('2026-10-16');
-  });
-});
-
 describe('dailyStatus', () => {
   it('boundaries 0.9 / 1.1', () => {
     expect(dailyStatus(899, 1000).status).toBe('under');
@@ -284,32 +205,5 @@ describe('dailyStatus', () => {
       met: '達標',
       over: '超過',
     });
-  });
-});
-
-describe('fillDailySeries', () => {
-  it('fills a 7-day window across a month boundary', () => {
-    const rows = [
-      { dateKey: '2026-10-30', calories: 700, count: 2 },
-      { dateKey: '2026-11-02', calories: 350, count: 1 },
-      { dateKey: '2026-10-01', calories: 999, count: 9 }, // outside window
-    ];
-    const series = fillDailySeries(rows, '2026-11-03', 7);
-    expect(series).toEqual([
-      { dateKey: '2026-10-28', calories: 0, count: 0 },
-      { dateKey: '2026-10-29', calories: 0, count: 0 },
-      { dateKey: '2026-10-30', calories: 700, count: 2 },
-      { dateKey: '2026-10-31', calories: 0, count: 0 },
-      { dateKey: '2026-11-01', calories: 0, count: 0 },
-      { dateKey: '2026-11-02', calories: 350, count: 1 },
-      { dateKey: '2026-11-03', calories: 0, count: 0 },
-    ]);
-  });
-
-  it('handles empty rows and days = 1', () => {
-    expect(fillDailySeries([], '2026-10-16', 1)).toEqual([
-      { dateKey: '2026-10-16', calories: 0, count: 0 },
-    ]);
-    expect(fillDailySeries([], '2026-10-16', 30)).toHaveLength(30);
   });
 });

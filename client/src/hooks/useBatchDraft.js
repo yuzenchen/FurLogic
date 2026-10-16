@@ -1,41 +1,40 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { clearMealDraft, getMealDraft, saveMealDraft } from '../utils/storage';
-import { emptyMealDraft, mealDraftReducer } from '../utils/mealDraft';
+import {
+  clearBatchDraft,
+  getBatchDraft,
+  saveBatchDraft,
+} from '../utils/storage';
+import { batchDraftReducer, emptyBatchDraft } from '../utils/batchDraft';
 
-/** 從 localStorage 讀草稿;沒有食材的草稿重新依目前時間推測餐別 */
-const loadDraft = () => {
-  const stored = getMealDraft();
-  if (!stored || stored.items.length === 0) return emptyMealDraft();
-  return stored;
-};
+const loadDraft = () => getBatchDraft() ?? emptyBatchDraft();
 
 /**
- * 記餐草稿(存在 localStorage,切換分頁後重新掛載也會還原)。
+ * 批次草稿(存在 localStorage,切換分頁後重新掛載也會還原;不送伺服器)。
  * 每個 action 先同步算出新狀態並寫入儲存,再更新 React 狀態 ——
  * 這樣即使呼叫後立刻切換分頁(元件卸載),草稿也不會遺失。
  */
-export default function useMealDraft() {
+export default function useBatchDraft() {
   const [state, setState] = useState(loadDraft);
   const stateRef = useRef(state);
 
   const dispatch = useCallback((action) => {
-    const next = mealDraftReducer(stateRef.current, action);
+    const next = batchDraftReducer(stateRef.current, action);
     if (next === stateRef.current) return;
     stateRef.current = next;
-    if (action.type === 'clear') clearMealDraft();
-    else saveMealDraft(next);
+    if (action.type === 'clear') clearBatchDraft();
+    else saveBatchDraft(next);
     setState(next);
   }, []);
 
   const actions = useMemo(
     () => ({
-      setLabel: (label) => dispatch({ type: 'setLabel', label }),
+      setServings: (servings) => dispatch({ type: 'setServings', servings }),
       addFood: (food) => dispatch({ type: 'addFood', food }),
       removeFood: (id) => dispatch({ type: 'removeFood', id }),
       setGrams: (id, grams) => dispatch({ type: 'setGrams', id, grams }),
       bump: (id, delta) => dispatch({ type: 'bump', id, delta }),
-      applyAllocation: (target) =>
-        dispatch({ type: 'applyAllocation', target }),
+      applyAllocation: (servings, mealTarget) =>
+        dispatch({ type: 'applyAllocation', servings, mealTarget }),
       clear: () => dispatch({ type: 'clear' }),
     }),
     [dispatch],

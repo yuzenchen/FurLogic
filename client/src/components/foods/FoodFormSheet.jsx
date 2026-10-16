@@ -131,12 +131,12 @@ const buildPatch = (v, original) => {
 };
 
 /**
- * 新增 / 編輯食材的抽屜(記餐頁與食材頁共用)。父元件在需要時才掛載。
+ * 新增 / 編輯食材的抽屜(批次頁與食材頁共用)。父元件在需要時才掛載。
  * @param {'manual'|'lookup'|'edit'} mode
  * @param {object} initial 預填資料(lookup draft / 既有食材 / { name })
  * @param {'high'|'low'} [confidence] lookup 信心度
  * @param {string} [notice] 表單上方提示(查詢失敗等)
- * @param {'log'|'foods'} context log:儲存後加入這餐(有毒則只存入食材庫)
+ * @param {'batch'|'foods'} context batch:儲存後加入批次(有毒則只存入食材庫)
  * @param {(food: object) => void} onSaved 儲存成功或選擇「改用現有的」時呼叫
  */
 export default function FoodFormSheet({
@@ -223,7 +223,7 @@ export default function FoodFormSheet({
 
   let submitLabel = '儲存';
   if (isEdit) submitLabel = '儲存變更';
-  else if (context === 'log')
+  else if (context === 'batch')
     submitLabel = isToxic ? '只存入食材庫' : '儲存並加入';
 
   const badgeSource = isEdit
