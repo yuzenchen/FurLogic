@@ -1,0 +1,11 @@
+{
+  "name": "@furlogic/shared",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./foodDatabase": "./src/foodDatabase.js"
+  }
+}

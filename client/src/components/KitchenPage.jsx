@@ -3,9 +3,9 @@ import { Sparkles, ChefHat } from 'lucide-react';
 import {
   generateRecipe,
   generateRecipeFromPortions,
-} from '../utils/nutritionCalculator';
-import { MEALS_PER_DAY } from '../utils/nutritionConstants';
-import { FOOD_DATABASE } from '../data/foodDatabase';
+  MEALS_PER_DAY,
+  FOOD_DATABASE,
+} from '@furlogic/shared';
 import { usePet } from '../context/PetContext';
 import useKitchenIngredients from '../hooks/useKitchenIngredients';
 import useVisionWorker from '../hooks/useVisionWorker';

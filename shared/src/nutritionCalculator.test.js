@@ -7,7 +7,7 @@ import {
   analyzeCaPRatio,
   generateRecipe,
   generateRecipeFromPortions,
-} from './nutritionCalculator';
+} from './nutritionCalculator.js';
 
 describe('calculateRER', () => {
   it('handles a 12 kg dog', () => {

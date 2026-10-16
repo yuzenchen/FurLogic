@@ -10,7 +10,7 @@ import {
   Sparkles,
   PlusCircle,
 } from 'lucide-react';
-import { FOOD_DATABASE, FOOD_TYPES } from '../../data/foodDatabase';
+import { FOOD_DATABASE, FOOD_TYPES } from '@furlogic/shared';
 import AdHocFoodForm from './AdHocFoodForm';
 
 /**

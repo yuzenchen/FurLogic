@@ -1,9 +1,6 @@
 import React from 'react';
 import { Check, AlertTriangle } from 'lucide-react';
-import {
-  CAP_RATIO_MIN_GOOD,
-  CAP_RATIO_MAX_GOOD,
-} from '../../utils/nutritionConstants';
+import { CAP_RATIO_MIN_GOOD, CAP_RATIO_MAX_GOOD } from '@furlogic/shared';
 
 /**
  * Ca:P 比例視覺化色帶 + 指針

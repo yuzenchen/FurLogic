@@ -2,37 +2,31 @@
   "name": "furlogic",
   "version": "1.0.1",
   "description": "智能寵物營養管理系統",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
   "engines": {
-    "node": ">=14.18.0"
+    "node": ">=18"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --ext js,jsx",
-    "format": "prettier --write \"src/**/*.{js,jsx,css}\"",
-    "format:check": "prettier --check \"src/**/*.{js,jsx,css}\"",
+    "dev": "concurrently -n client,server -c cyan,magenta \"npm run dev -w client\" \"npm run dev -w server --if-present\"",
+    "build": "npm run build -w client",
+    "lint": "eslint client/src server/src shared/src --ext .js,.jsx --no-error-on-unmatched-pattern",
+    "format": "prettier --write \"{client,shared,server}/src/**/*.{js,jsx,css}\"",
+    "format:check": "prettier --check \"{client,shared,server}/src/**/*.{js,jsx,css}\"",
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "lucide-react": "^0.294.0"
-  },
   "devDependencies": {
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.0",
     "prettier": "^3.3.3",
-    "vite": "^4.5.3",
     "vitest": "^1.6.0"
   },
   "keywords": [

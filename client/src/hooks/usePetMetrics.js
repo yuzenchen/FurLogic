@@ -4,7 +4,7 @@ import {
   calculateDER,
   calculateActivityFactor,
   calculateWaterNeed,
-} from '../utils/nutritionCalculator';
+} from '@furlogic/shared';
 
 /**
  * 從毛孩檔案推算 RER / DER / 活動係數 / 飲水量。

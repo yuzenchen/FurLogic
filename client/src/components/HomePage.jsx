@@ -9,7 +9,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { usePet } from '../context/PetContext';
-import { MEALS_PER_DAY } from '../utils/nutritionConstants';
+import { MEALS_PER_DAY } from '@furlogic/shared';
 
 /**
  * 首頁 - 健康儀表板

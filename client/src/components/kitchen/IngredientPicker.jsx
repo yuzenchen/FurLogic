@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChefHat, Check, Drumstick, Leaf, AlertTriangle } from 'lucide-react';
-import { FOOD_DATABASE, FOOD_TYPES } from '../../data/foodDatabase';
+import { FOOD_DATABASE, FOOD_TYPES } from '@furlogic/shared';
 
 const PICKER_FOODS = FOOD_DATABASE.filter((i) => i.recipeRole !== 'excluded');
 

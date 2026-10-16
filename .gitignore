@@ -38,3 +38,8 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+# Monorepo / server runtime
+client/dist/
+data/
+*.db
+*.db-*

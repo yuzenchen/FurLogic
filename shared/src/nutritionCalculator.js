@@ -12,7 +12,7 @@ import {
   CAP_RATIO_TARGET,
   MEAT_CALORIE_RATIO,
   EGGSHELL_CA_MG_PER_GRAM,
-} from './nutritionConstants';
+} from './nutritionConstants.js';
 
 /**
  * RER (Resting Energy Requirement) 靜止能量需求 (kcal)
@@ -150,7 +150,7 @@ export const generateRecipe = (selectedIngredients, targetCalories) => {
  * 蛋白質/脂肪以 g 表示;碳水從「實際 totalCalories - protein*4 - fat*9」倒推,
  * clamp 在 0 以上。回傳 g + 各占總熱量的百分比。
  */
-const computeMacros = (totalProtein, totalFat, totalCalories) => {
+export const computeMacros = (totalProtein, totalFat, totalCalories) => {
   const proteinKcal = totalProtein * 4;
   const fatKcal = totalFat * 9;
   const carbsKcal = Math.max(0, totalCalories - proteinKcal - fatKcal);
@@ -216,7 +216,7 @@ export const generateRecipeFromPortions = (entries) => {
   };
 };
 
-const buildSupplements = (analysis, totalCa, totalP) => {
+export const buildSupplements = (analysis, totalCa, totalP) => {
   const list = [];
   if (analysis.status === 'low') {
     const targetCa = totalP * CAP_RATIO_TARGET;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Check, AlertTriangle, X } from 'lucide-react';
-import { FOOD_DATABASE, SAFETY_LEVELS } from '../data/foodDatabase';
+import { FOOD_DATABASE, SAFETY_LEVELS } from '@furlogic/shared';
 
 /**
  * 食材知識庫查詢頁面

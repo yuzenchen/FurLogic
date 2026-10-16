@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FOOD_DATABASE } from '../data/foodDatabase';
+import { FOOD_DATABASE } from '@furlogic/shared';
 import {
   getKitchenIngredients,
   saveKitchenIngredients,
