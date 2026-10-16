@@ -7,7 +7,6 @@
 data/
 **/*.db
 **/*.db-*
-deno/
 FurLogic_MVP
 docs/
 coverage/
