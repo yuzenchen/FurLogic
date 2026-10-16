@@ -8,6 +8,7 @@ import { seedDatabase } from './db/seed.js';
 import foodRoutes from './routes/foods.js';
 import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
+import lookupRoutes from './routes/lookup.js';
 import mealRoutes from './routes/meals.js';
 import petRoutes from './routes/pets.js';
 import statsRoutes from './routes/stats.js';
@@ -16,9 +17,7 @@ const API_ROUTES = [
   healthRoutes,
   petRoutes,
   foodRoutes,
-  // lookupRoutes — POST /api/foods/lookup (later task): register here and opt
-  // in to the rate limiter per route with `config: { rateLimit: { max: 10,
-  // timeWindow: '1 minute' } }`; the lookup_cache table already exists.
+  lookupRoutes, // POST /api/foods/lookup(限流 10 req/min/IP)
   mealRoutes,
   statsRoutes,
   importRoutes,
@@ -61,12 +60,15 @@ const toErrorResponse = (err) => {
 
 /**
  * 建立 Fastify app(尚未 listen)。
- * @param {{ dbPath?: string, config?: object, logger?: boolean|object }} opts
+ * fetch 可注入(測試用,避免打外部 API)。
+ * @param {{ dbPath?: string, config?: object, logger?: boolean|object,
+ *           fetch?: typeof fetch }} opts
  */
 export async function buildApp({
   dbPath = ':memory:',
   config = loadConfig(),
   logger = false,
+  fetch = globalThis.fetch,
 } = {}) {
   const app = Fastify({
     logger,
@@ -118,7 +120,7 @@ export async function buildApp({
 
   await app.register(
     async (api) => {
-      for (const routes of API_ROUTES) await api.register(routes);
+      for (const routes of API_ROUTES) await api.register(routes, { fetch });
     },
     { prefix: '/api' },
   );

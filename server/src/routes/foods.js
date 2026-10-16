@@ -180,5 +180,5 @@ export default async function foodRoutes(app) {
     },
   );
 
-  // POST /foods/lookup 由後續任務實作(見 app.js 的 route 註冊)。
+  // POST /foods/lookup 在 routes/lookup.js。
 }
