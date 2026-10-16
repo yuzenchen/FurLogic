@@ -1,106 +1,81 @@
 import React from 'react';
-import { Check, AlertTriangle } from 'lucide-react';
-import { CAP_RATIO_MIN_GOOD, CAP_RATIO_MAX_GOOD } from '@furlogic/shared';
+import { AlertTriangle, Check, HelpCircle } from 'lucide-react';
+import { CAP_RATIO_MAX_GOOD, CAP_RATIO_MIN_GOOD } from '@furlogic/shared';
+
+const SCALE_MIN = 0;
+const SCALE_MAX = 3;
+const toPct = (v) => ((v - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
+
+const TONES = {
+  good: { icon: Check, text: 'text-emerald-700', pointer: 'bg-emerald-700' },
+  low: { icon: AlertTriangle, text: 'text-amber-700', pointer: 'bg-amber-700' },
+  high: { icon: AlertTriangle, text: 'text-rose-700', pointer: 'bg-rose-700' },
+  unknown: {
+    icon: HelpCircle,
+    text: 'text-stone-600',
+    pointer: 'bg-stone-600',
+  },
+};
 
 /**
- * Ca:P 比例視覺化色帶 + 指針
- * 比例軸 0 ~ 3,綠色帶為 1.0–2.0(理想範圍)。
+ * 鈣磷比(Ca:P)色帶 + 指針。比例軸 0–3,emerald 區段為理想範圍。
+ * analysis 來自 shared analyzeCaPRatio:{ ratio, status: good|low|high|unknown, advice }
  */
 export default function CaPRatioGauge({ analysis }) {
-  const ratio = Number(analysis.ratio) || 0;
-  const isGood = analysis.status === 'good';
-  const isUnknown = analysis.status === 'unknown';
-  const isLow = analysis.status === 'low';
+  const ratio = Number(analysis?.ratio) || 0;
+  const status = TONES[analysis?.status] ? analysis.status : 'unknown';
+  const isUnknown = status === 'unknown';
+  const { icon: Icon, text, pointer } = TONES[status];
 
-  const SCALE_MIN = 0;
-  const SCALE_MAX = 3;
   const clamped = Math.min(Math.max(ratio, SCALE_MIN), SCALE_MAX);
-  const pct = ((clamped - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
-  const goodStartPct =
-    ((CAP_RATIO_MIN_GOOD - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
-  const goodEndPct =
-    ((CAP_RATIO_MAX_GOOD - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
-  const goodWidthPct = goodEndPct - goodStartPct;
-
-  const tone = isUnknown ? 'gray' : isGood ? 'green' : isLow ? 'amber' : 'rose';
-
-  const containerClass = {
-    green: 'bg-green-50 border-green-200',
-    amber: 'bg-amber-50 border-amber-200',
-    rose: 'bg-rose-50 border-rose-200',
-    gray: 'bg-gray-50 border-gray-200',
-  }[tone];
-
-  const titleClass = {
-    green: 'text-green-800',
-    amber: 'text-amber-800',
-    rose: 'text-rose-800',
-    gray: 'text-gray-800',
-  }[tone];
+  const goodStart = toPct(CAP_RATIO_MIN_GOOD);
+  const goodWidth = toPct(CAP_RATIO_MAX_GOOD) - goodStart;
 
   return (
-    <section
-      className={`p-4 rounded-2xl border ${containerClass}`}
-      aria-label="鈣磷比分析"
-    >
-      <div className="flex items-center gap-2 mb-3">
-        {isGood ? (
-          <Check size={18} className="text-green-600" />
-        ) : (
-          <AlertTriangle
-            size={18}
-            className={
-              tone === 'amber'
-                ? 'text-amber-600'
-                : tone === 'rose'
-                  ? 'text-rose-600'
-                  : 'text-gray-500'
-            }
-          />
-        )}
-        <h3 className={`font-bold text-sm ${titleClass}`}>
-          鈣磷比分析{!isUnknown && ` (Ca:P = 1:${analysis.ratio})`}
+    <section aria-label="鈣磷比分析">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon size={18} className={text} aria-hidden="true" />
+        <h3 className="text-sm font-semibold text-stone-900">
+          鈣磷比
+          {!isUnknown && (
+            <span className="ml-1 font-normal text-stone-600 tabular-nums">
+              Ca:P = {ratio.toFixed(2)}:1
+            </span>
+          )}
         </h3>
       </div>
 
       {!isUnknown && (
-        <div
-          className="relative h-3 rounded-full bg-gray-200 mb-2 overflow-visible"
-          role="img"
-          aria-label={`鈣磷比 ${ratio.toFixed(2)},理想範圍 ${CAP_RATIO_MIN_GOOD}–${CAP_RATIO_MAX_GOOD}`}
-        >
-          {/* 綠色理想區段 */}
+        <>
           <div
-            className="absolute inset-y-0 bg-green-300/70"
-            style={{
-              left: `${goodStartPct}%`,
-              width: `${goodWidthPct}%`,
-            }}
-          />
-          {/* 指針 */}
+            className="relative mb-1 h-3 rounded-full bg-stone-200"
+            role="img"
+            aria-label={`鈣磷比 ${ratio.toFixed(2)},理想範圍 ${CAP_RATIO_MIN_GOOD}–${CAP_RATIO_MAX_GOOD}`}
+          >
+            <div
+              className="absolute inset-y-0 bg-emerald-200"
+              style={{ left: `${goodStart}%`, width: `${goodWidth}%` }}
+            />
+            <div
+              className={`absolute -top-1 -bottom-1 w-1 rounded-full ${pointer}`}
+              style={{ left: `calc(${toPct(clamped)}% - 2px)` }}
+            />
+          </div>
           <div
-            className={`absolute -top-1 -bottom-1 w-1 rounded-full shadow ${
-              isGood
-                ? 'bg-green-700'
-                : tone === 'amber'
-                  ? 'bg-amber-600'
-                  : 'bg-rose-600'
-            }`}
-            style={{ left: `calc(${pct}% - 2px)` }}
-          />
-        </div>
+            className="mb-2 flex justify-between text-xs text-stone-600 tabular-nums"
+            aria-hidden="true"
+          >
+            <span>0</span>
+            <span>1.0</span>
+            <span>2.0</span>
+            <span>3.0+</span>
+          </div>
+        </>
       )}
 
-      {!isUnknown && (
-        <div className="flex justify-between text-[10px] text-gray-500 mb-3 font-mono">
-          <span>0</span>
-          <span>1.0</span>
-          <span>2.0</span>
-          <span>3.0+</span>
-        </div>
-      )}
-
-      <p className="text-xs text-gray-600 leading-relaxed">{analysis.advice}</p>
+      <p className={`text-sm ${isUnknown ? 'text-stone-600' : text}`}>
+        {analysis?.advice}
+      </p>
     </section>
   );
 }

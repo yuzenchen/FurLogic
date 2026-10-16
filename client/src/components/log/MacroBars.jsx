@@ -1,64 +1,60 @@
 import React from 'react';
-import { Activity } from 'lucide-react';
+
+const ROWS = [
+  { key: 'protein', label: '蛋白質', tone: 'bg-orange-500' },
+  { key: 'fat', label: '脂肪', tone: 'bg-amber-400' },
+  { key: 'carbs', label: '碳水', tone: 'bg-emerald-500' },
+];
 
 /**
- * 蛋白質 / 脂肪 / 碳水的橫向 stacked bar + 各別 g 數
+ * 蛋白質 / 脂肪 / 碳水的熱量占比(總覽堆疊條 + 各別橫條與 g 數)。
+ * macros 來自 shared computeMacros:{ protein|fat|carbs: { g, pct } }
  */
 export default function MacroBars({ macros, actualCalories }) {
-  const rows = [
-    {
-      key: 'protein',
-      label: '蛋白質',
-      tone: 'bg-orange-500',
-      text: 'text-orange-700',
-    },
-    { key: 'fat', label: '脂肪', tone: 'bg-amber-400', text: 'text-amber-700' },
-    {
-      key: 'carbs',
-      label: '碳水',
-      tone: 'bg-emerald-500',
-      text: 'text-emerald-700',
-    },
-  ];
-
   return (
-    <section>
-      <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-        <Activity size={16} /> 巨集營養素{' '}
+    <section aria-label="三大營養素熱量占比">
+      <h3 className="mb-2 text-sm font-semibold text-stone-900">
+        三大營養素
         {actualCalories != null && (
-          <span className="text-xs font-normal text-gray-400">
-            ({actualCalories} kcal 實際)
+          <span className="ml-1 font-normal text-stone-600 tabular-nums">
+            ({actualCalories} kcal)
           </span>
         )}
       </h3>
 
-      {/* Stacked overview bar */}
-      <div className="h-2 rounded-full overflow-hidden flex bg-gray-100 mb-4">
-        {rows.map(({ key, tone }) => (
+      <div
+        className="mb-3 flex h-2 overflow-hidden rounded-full bg-stone-100"
+        aria-hidden="true"
+      >
+        {ROWS.map(({ key, tone }) => (
           <div
             key={key}
             className={tone}
-            style={{ width: `${macros[key].pct}%` }}
-            aria-hidden
+            style={{ width: `${macros?.[key]?.pct ?? 0}%` }}
           />
         ))}
       </div>
 
       <ul className="space-y-2">
-        {rows.map(({ key, label, tone, text }) => (
-          <li key={key} className="flex items-center gap-3">
-            <span className={`text-xs font-bold w-12 ${text}`}>{label}</span>
-            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full ${tone} transition-all`}
-                style={{ width: `${macros[key].pct}%` }}
-              />
-            </div>
-            <span className="text-xs text-gray-600 font-mono w-20 text-right">
-              {macros[key].g}g · {macros[key].pct}%
-            </span>
-          </li>
-        ))}
+        {ROWS.map(({ key, label, tone }) => {
+          const m = macros?.[key] ?? { g: 0, pct: 0 };
+          return (
+            <li key={key} className="flex items-center gap-3">
+              <span className="w-12 text-xs font-semibold text-stone-800">
+                {label}
+              </span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-stone-100">
+                <div
+                  className={`h-full ${tone} transition-[width] motion-reduce:transition-none`}
+                  style={{ width: `${m.pct}%` }}
+                />
+              </div>
+              <span className="w-20 text-right text-xs text-stone-600 tabular-nums">
+                {m.g}g · {m.pct}%
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
