@@ -32,7 +32,8 @@ const roleFor = (food) => {
   if (food?.recipeRole === 'protein' || food?.recipeRole === 'plant') {
     return food.recipeRole;
   }
-  return food?.type === 'protein' ? 'protein' : 'plant';
+  // 與 toFormValues 的類別預設(蛋白質)一致:沒有類別時也預設蛋白質
+  return !food?.type || food.type === 'protein' ? 'protein' : 'plant';
 };
 
 const numText = (v) => (Number.isFinite(v) ? String(v) : '');

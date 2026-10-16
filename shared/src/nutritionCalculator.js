@@ -59,14 +59,14 @@ export const analyzeCaPRatio = (totalCa, totalP) => {
     return {
       ratio: ratioFixed,
       status: 'low',
-      advice: `缺鈣警告 (1:${(1 / ratio).toFixed(1)})。肉類磷含量高,務必添加鈣粉或蛋殼粉平衡。`,
+      advice: '缺鈣警告:肉類磷含量高,務必添加鈣粉或蛋殼粉平衡。',
     };
   }
   if (ratio > CAP_RATIO_MAX_GOOD) {
     return {
       ratio: ratioFixed,
       status: 'high',
-      advice: `鈣質過高 (1:${ratio.toFixed(1)})。請減少骨頭或鈣粉攝取。`,
+      advice: '鈣質過高:請減少骨頭或鈣粉攝取。',
     };
   }
   return { ratio: ratioFixed, status: 'good', advice: '鈣磷比完美!' };
