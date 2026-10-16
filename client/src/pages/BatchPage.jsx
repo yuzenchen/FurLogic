@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Info, Minus, Plus, Utensils, Wand2 } from 'lucide-react';
-import { DAILY_STATUS_LABELS, planBatch } from '@furlogic/shared';
+import {
+  DAILY_STATUS_LABELS,
+  MAX_VEG_WEIGHT_PCT,
+  canAllocateBatch,
+  isVegetable,
+  planBatch,
+  toVegWeightPct,
+} from '@furlogic/shared';
 import BatchItemRow from '../components/batch/BatchItemRow';
 import FoodSearchSheet from '../components/batch/FoodSearchSheet';
 import MealAnalysisCard from '../components/batch/MealAnalysisCard';
@@ -71,6 +78,8 @@ export default function BatchPage() {
   );
 
   const hasItems = items.length > 0;
+  const hasVeg = items.some((item) => isVegetable(item.food));
+  const canAllocate = canAllocateBatch(items) && mealTargetRaw > 0;
   const { batch, perServing, suggestedServings, servings } = plan;
   const hasResult = batch.totals.calories > 0;
 
@@ -147,6 +156,12 @@ export default function BatchPage() {
 
       {/* 空清單時 EmptyState 已有「加入食材」,不重複顯示操作列 */}
       <div className={hasItems ? 'mb-4' : 'hidden'}>
+        {hasVeg && (
+          <VegShareField
+            value={draft.vegWeightPct}
+            onChange={draft.setVegWeightPct}
+          />
+        )}
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="secondary"
@@ -158,15 +173,21 @@ export default function BatchPage() {
           <Button
             variant="secondary"
             icon={Wand2}
-            disabled={!hasItems || !(mealTargetRaw > 0)}
+            disabled={!canAllocate}
             onClick={() => draft.applyAllocation(servings, mealTargetRaw)}
           >
             依份數自動配量
           </Button>
         </div>
-        {hasItems && mealTargetRaw > 0 && (
+        {canAllocate && (
           <p className="mt-2 text-xs text-stone-600 tabular-nums">
             依 {servings} 份 × 單餐 {mealTarget} kcal 計算各食材總重
+            {hasVeg && `(蔬菜不計熱量,占整鍋重量 ${draft.vegWeightPct}%)`}
+          </p>
+        )}
+        {hasItems && !canAllocateBatch(items) && (
+          <p className="mt-2 text-xs text-stone-600">
+            蔬菜不計熱量,請先加入肉類或澱粉等有熱量的食材再自動配量
           </p>
         )}
       </div>
@@ -207,6 +228,53 @@ export default function BatchPage() {
         />
       )}
     </>
+  );
+}
+
+/** 自動配量時蔬菜占整鍋重量的百分比(0–90) */
+function VegShareField({ value, onChange }) {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText((current) =>
+      current !== '' && Number(current) === value ? current : String(value),
+    );
+  }, [value]);
+
+  const handleChange = (e) => {
+    const next = e.target.value.replace(/[^\d]/g, '').slice(0, 2);
+    setText(next);
+    if (next !== '') onChange(Number(next));
+  };
+
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <label
+        htmlFor="batch-veg-pct"
+        className="text-sm font-semibold text-stone-900"
+      >
+        蔬菜占整鍋重量
+      </label>
+      <input
+        id="batch-veg-pct"
+        type="text"
+        inputMode="numeric"
+        value={text}
+        onChange={handleChange}
+        onBlur={() => setText(String(toVegWeightPct(value)))}
+        aria-describedby="batch-veg-pct-hint"
+        className={cx(
+          'h-11 w-16 rounded-xl border border-stone-300 bg-white px-3 text-right text-stone-900 tabular-nums',
+          FOCUS_RING,
+        )}
+      />
+      <span className="text-sm text-stone-600" aria-hidden="true">
+        %
+      </span>
+      <span id="batch-veg-pct-hint" className="sr-only">
+        0 到 {MAX_VEG_WEIGHT_PCT}
+      </span>
+    </div>
   );
 }
 

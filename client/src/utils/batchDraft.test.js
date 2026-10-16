@@ -83,7 +83,7 @@ describe('toServings', () => {
 
 describe('batchDraftReducer', () => {
   it('starts with no servings override and no items', () => {
-    expect(empty).toEqual({ servings: null, items: [] });
+    expect(empty).toEqual({ servings: null, vegWeightPct: 20, items: [] });
   });
 
   it('setServings stores an integer or null (use suggestion)', () => {
@@ -141,15 +141,41 @@ describe('batchDraftReducer', () => {
     );
   });
 
-  it('applyAllocation fills total grams for servings × meal target', () => {
+  it('applyAllocation scales meat to the target and sizes veg by weight %', () => {
     const s = run(
       empty,
       { type: 'addFood', food: chicken },
       { type: 'addFood', food: pumpkin },
+      { type: 'setGrams', id: 1, grams: 1000 },
+      { type: 'setGrams', id: 3, grams: 500 },
       { type: 'applyAllocation', servings: 4, mealTarget: 361 },
     );
-    // 1444 kcal:70% → 1010.8 / 105 × 100 = 963;30% → 433.2 / 26 × 100 = 1666
-    expect(s.items.map((i) => i.grams)).toEqual([963, 1666]);
+    // 雞胸 1000 g → 1444 kcal 需 1375 g;南瓜占整鍋 20% → 344 g
+    expect(s.items.map((i) => i.grams)).toEqual([1375, 344]);
+  });
+
+  it('applyAllocation uses the draft vegWeightPct', () => {
+    const s = run(
+      empty,
+      { type: 'addFood', food: chicken },
+      { type: 'addFood', food: pumpkin },
+      { type: 'setVegWeightPct', pct: 50 },
+      { type: 'applyAllocation', servings: 1, mealTarget: 361 },
+    );
+    expect(s.items[0].grams).toBe(344);
+    expect(s.items[1].grams).toBe(344);
+  });
+
+  it('setVegWeightPct clamps to 0–90', () => {
+    expect(run(empty, { type: 'setVegWeightPct', pct: 120 }).vegWeightPct).toBe(
+      90,
+    );
+    expect(run(empty, { type: 'setVegWeightPct', pct: -1 }).vegWeightPct).toBe(
+      0,
+    );
+    expect(batchDraftReducer(empty, { type: 'setVegWeightPct', pct: 20 })).toBe(
+      empty,
+    );
   });
 
   it('applyAllocation treats a missing servings count as 1', () => {
@@ -158,17 +184,19 @@ describe('batchDraftReducer', () => {
       { type: 'addFood', food: chicken },
       { type: 'applyAllocation', servings: null, mealTarget: 361 },
     );
-    expect(s.items[0].grams).toBe(Math.round(((361 * 0.7) / 105) * 100));
+    // 只有肉、且為 0 g → 肉負責 100% 熱量
+    expect(s.items[0].grams).toBe(Math.round((361 / 105) * 100));
   });
 
-  it('clear resets items and servings', () => {
+  it('clear resets items and servings but keeps vegWeightPct', () => {
     const s = run(
       empty,
       { type: 'addFood', food: chicken },
       { type: 'setServings', servings: 5 },
+      { type: 'setVegWeightPct', pct: 30 },
       { type: 'clear' },
     );
-    expect(s).toEqual({ servings: null, items: [] });
+    expect(s).toEqual({ servings: null, vegWeightPct: 30, items: [] });
   });
 
   it('returns the same state for unknown actions', () => {

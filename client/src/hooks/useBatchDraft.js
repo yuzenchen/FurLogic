@@ -1,9 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import {
-  clearBatchDraft,
-  getBatchDraft,
-  saveBatchDraft,
-} from '../utils/storage';
+import { getBatchDraft, saveBatchDraft } from '../utils/storage';
 import { batchDraftReducer, emptyBatchDraft } from '../utils/batchDraft';
 
 const loadDraft = () => getBatchDraft() ?? emptyBatchDraft();
@@ -21,8 +17,7 @@ export default function useBatchDraft() {
     const next = batchDraftReducer(stateRef.current, action);
     if (next === stateRef.current) return;
     stateRef.current = next;
-    if (action.type === 'clear') clearBatchDraft();
-    else saveBatchDraft(next);
+    saveBatchDraft(next);
     setState(next);
   }, []);
 
@@ -33,6 +28,7 @@ export default function useBatchDraft() {
       removeFood: (id) => dispatch({ type: 'removeFood', id }),
       setGrams: (id, grams) => dispatch({ type: 'setGrams', id, grams }),
       bump: (id, delta) => dispatch({ type: 'bump', id, delta }),
+      setVegWeightPct: (pct) => dispatch({ type: 'setVegWeightPct', pct }),
       applyAllocation: (servings, mealTarget) =>
         dispatch({ type: 'applyAllocation', servings, mealTarget }),
       clear: () => dispatch({ type: 'clear' }),

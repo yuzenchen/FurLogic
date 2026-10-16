@@ -1,9 +1,14 @@
 /**
  * 批次草稿的純函式:reducer 與食材快照。
- * 草稿形狀 { servings: number|null, items: [{ food, grams }] }(與 utils/storage 的驗證一致)。
- * servings 為 null 時使用建議份數;grams 為整鍋生重。
+ * 草稿形狀 { servings: number|null, vegWeightPct: number, items: [{ food, grams }] }
+ * (與 utils/storage 的驗證一致)。servings 為 null 時使用建議份數;grams 為整鍋生重;
+ * vegWeightPct 為自動配量時蔬菜占整鍋重量的百分比(0–90)。
  */
-import { allocateBatchForServings } from '@furlogic/shared';
+import {
+  DEFAULT_VEG_WEIGHT_PCT,
+  allocateBatchForServings,
+  toVegWeightPct,
+} from '@furlogic/shared';
 
 export const BUMP_STEP = 50;
 export const MIN_SERVINGS = 1;
@@ -25,7 +30,11 @@ const SNAPSHOT_KEYS = [
   'source',
 ];
 
-export const emptyBatchDraft = () => ({ servings: null, items: [] });
+export const emptyBatchDraft = (vegWeightPct = DEFAULT_VEG_WEIGHT_PCT) => ({
+  servings: null,
+  vegWeightPct,
+  items: [],
+});
 
 /** 只保留草稿需要的食材欄位(避免把 description 等大欄位存進 localStorage) */
 export const snapshotFood = (food) => {
@@ -67,8 +76,9 @@ const mapItem = (state, id, fn) => ({
  * - { type: 'removeFood', id }
  * - { type: 'setGrams', id, grams }     ≥ 0;NaN → 0
  * - { type: 'bump', id, delta }         delta 為正 → +50,負 → −50,下限 0
+ * - { type: 'setVegWeightPct', pct }    蔬菜占整鍋重量 %,限制 0–90
  * - { type: 'applyAllocation', servings, mealTarget }  依份數 × 單餐目標配量
- * - { type: 'clear' }
+ * - { type: 'clear' }                   清空食材與份數,保留蔬菜占比設定
  */
 export function batchDraftReducer(state, action) {
   switch (action?.type) {
@@ -102,11 +112,18 @@ export function batchDraftReducer(state, action) {
       const step = action.delta < 0 ? -BUMP_STEP : BUMP_STEP;
       return mapItem(state, action.id, (g) => toGrams(g + step));
     }
+    case 'setVegWeightPct': {
+      const vegWeightPct = toVegWeightPct(action.pct);
+      return vegWeightPct === state.vegWeightPct
+        ? state
+        : { ...state, vegWeightPct };
+    }
     case 'applyAllocation': {
       const allocated = allocateBatchForServings(
-        state.items.map((item) => item.food),
+        state.items,
         toServings(action.servings) ?? MIN_SERVINGS,
         Number(action.mealTarget) || 0,
+        state.vegWeightPct,
       );
       return {
         ...state,
@@ -117,7 +134,7 @@ export function batchDraftReducer(state, action) {
       };
     }
     case 'clear':
-      return emptyBatchDraft();
+      return emptyBatchDraft(toVegWeightPct(state.vegWeightPct));
     default:
       return state;
   }

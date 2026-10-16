@@ -63,6 +63,7 @@ describe('batch draft', () => {
   it('validates shape on read', () => {
     const draft = {
       servings: 4,
+      vegWeightPct: 25,
       items: [{ food: { id: 1, name: '雞胸' }, grams: 1000 }],
     };
     saveBatchDraft(draft);
@@ -70,7 +71,12 @@ describe('batch draft', () => {
     saveBatchDraft({ ...draft, servings: null });
     expect(getBatchDraft().servings).toBeNull();
     storage.setItem('furlogic_batch_draft', '{"items":[]}');
-    expect(getBatchDraft()).toEqual({ servings: null, items: [] });
+    // 舊草稿沒有 vegWeightPct → 補預設 20
+    expect(getBatchDraft()).toEqual({
+      servings: null,
+      vegWeightPct: 20,
+      items: [],
+    });
     storage.setItem('furlogic_batch_draft', '{"servings":0,"items":[]}');
     expect(getBatchDraft()).toBeNull();
     storage.setItem('furlogic_batch_draft', '{"servings":2,"items":[{}]}');

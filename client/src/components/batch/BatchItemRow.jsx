@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Drumstick, Leaf, Minus, Plus, Trash2 } from 'lucide-react';
 import { FOCUS_RING, cx } from '../ui';
+import { isVegetable } from '@furlogic/shared';
 import { BUMP_STEP } from '../../utils/batchDraft';
 
 const ICON_BUTTON = cx(
@@ -12,6 +13,7 @@ const gramsText = (grams) => (grams > 0 ? String(grams) : '');
 
 /**
  * 整鍋中的一項食材:圖示、名稱、每 100g 熱量、警語、整鍋克數調整、本項熱量。
+ * 蔬菜不計熱量,改顯示「不計熱量」。
  * 輸入框保留使用者正在打的字串(例如「12.」),只在外部改變克數時同步。
  */
 export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
@@ -30,7 +32,8 @@ export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
 
   const isProtein = food.recipeRole === 'protein';
   const RoleIcon = isProtein ? Drumstick : Leaf;
-  const kcal = Math.round(((food.calories ?? 0) * grams) / 100);
+  const isVeg = isVegetable(food);
+  const kcal = isVeg ? 0 : Math.round(((food.calories ?? 0) * grams) / 100);
 
   const handleChange = (e) => {
     const value = e.target.value.replace(',', '.');
@@ -54,18 +57,20 @@ export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
             {food.name}
           </p>
           <p className="text-xs text-stone-600 tabular-nums">
-            {food.calories ?? 0} kcal/100g
+            {isVeg ? '蔬菜 · 不計熱量' : `${food.calories ?? 0} kcal/100g`}
           </p>
           {food.safety === 'caution' && food.warning && (
             <p className="mt-0.5 text-xs text-amber-700">{food.warning}</p>
           )}
         </div>
-        <p className="shrink-0 text-sm font-semibold text-stone-900 tabular-nums">
-          {kcal}
-          <span className="ml-0.5 text-xs font-normal text-stone-600">
-            kcal
-          </span>
-        </p>
+        {!isVeg && (
+          <p className="shrink-0 text-sm font-semibold text-stone-900 tabular-nums">
+            {kcal}
+            <span className="ml-0.5 text-xs font-normal text-stone-600">
+              kcal
+            </span>
+          </p>
+        )}
       </div>
       <div className="mt-2 flex items-center gap-1 pl-8">
         <button

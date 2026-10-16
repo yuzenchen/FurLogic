@@ -2,6 +2,8 @@
  * localStorage 小工具。所有存取都包 try/catch(無痕模式 / 停用儲存時不會壞掉)。
  * 毛孩資料、食材都存在 API,這裡只放 UI 偏好、批次草稿與舊版資料遷移。
  */
+import { toVegWeightPct } from '@furlogic/shared';
+
 const KEYS = {
   ACTIVE_TAB: 'furlogic_active_tab',
   BATCH_DRAFT: 'furlogic_batch_draft',
@@ -97,7 +99,8 @@ const isValidServings = (n) => n === null || (Number.isInteger(n) && n >= 1);
 
 /**
  * 讀批次草稿;順便清掉已停用的單餐草稿 key。格式不符回 null。
- * @returns {{ servings: number|null, items: Array<{ food: object, grams: number }> } | null}
+ * vegWeightPct 缺漏或不合法時補預設值(舊草稿相容)。
+ * @returns {{ servings: number|null, vegWeightPct: number, items: Array<{ food: object, grams: number }> } | null}
  */
 export const getBatchDraft = () => {
   removeRaw(KEYS.LEGACY_SINGLE_DRAFT);
@@ -110,7 +113,11 @@ export const getBatchDraft = () => {
   ) {
     return null;
   }
-  return { servings: draft.servings ?? null, items: draft.items };
+  return {
+    servings: draft.servings ?? null,
+    vegWeightPct: toVegWeightPct(draft.vegWeightPct),
+    items: draft.items,
+  };
 };
 
 export const saveBatchDraft = (draft) => {
