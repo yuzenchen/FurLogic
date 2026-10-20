@@ -26,7 +26,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-}
     ports:
-      - "8080:80"
+      - "8080:888"
     depends_on:
       api:
         condition: service_healthy

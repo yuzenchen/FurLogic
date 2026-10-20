@@ -119,7 +119,7 @@ Pi 上已有 Cloudflare Tunnel 容器 `bfx-cloudflared`(token 模式,路由在 C
 
 1. Zero Trust → Networks → Tunnels → 選該 tunnel → Public Hostname → Add。
 2. Subdomain `furlogic`、網域 `yuzen.tw`(實際依自己的網域決定)。
-3. Service:Type `HTTP`、URL `furlogic-web:80`。
+3. Service:Type `HTTP`、URL `furlogic-web:888`。
 
 > ⚠️ 加上公開網址後等於全網可連,而目前 App 沒有登入機制。**建議同時在 Zero Trust → Access → Applications 幫該 hostname 加 Access 政策**(例如只允許自己的 email)。
 
