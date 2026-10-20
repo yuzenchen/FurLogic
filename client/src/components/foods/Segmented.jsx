@@ -4,6 +4,7 @@ import { FOCUS_RING, cx } from '../ui';
 /**
  * 分段選擇(radiogroup)。options: [{ value, label }]
  * 選中 bg-orange-700 白字;其他白底 + stone-300 邊框。
+ * fit:按鈕依文字寬度排列(放在標題列等非滿版位置);預設各按鈕平分寬度。
  */
 export default function Segmented({
   label,
@@ -11,6 +12,7 @@ export default function Segmented({
   options,
   onChange,
   labelId,
+  fit = false,
 }) {
   return (
     <div
@@ -29,7 +31,8 @@ export default function Segmented({
             aria-checked={selected}
             onClick={() => onChange(opt.value)}
             className={cx(
-              'h-11 flex-1 min-w-0 whitespace-nowrap rounded-xl px-3 text-sm font-semibold transition-colors',
+              'h-11 whitespace-nowrap rounded-xl px-3 text-sm font-semibold transition-colors',
+              fit ? 'flex-none' : 'flex-1 min-w-0',
               selected
                 ? 'bg-orange-700 text-white'
                 : 'bg-white border border-stone-300 text-stone-800 hover:bg-stone-50',

@@ -143,6 +143,7 @@ export default function BatchPage() {
               value={inputMode}
               options={INPUT_MODE_OPTIONS}
               onChange={draft.setInputMode}
+              fit
             />
           </div>
         </div>
