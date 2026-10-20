@@ -77,7 +77,11 @@
    - 該列 `capKindOf(food)` 出現在 `capWarnings` 時列底加 `amber-700 text-xs`「{label}每餐建議 ≤ {cap} g,目前合計 {grams} g」(同類多列都顯示)。
    - 卡底摘要列(`border-t`,`text-sm tabular-nums`,三欄):「固定 {fixedKcal}」「替換 {variantKcal}」「缺口 {gapKcal} kcal」(缺口 < 0 用 rose-700)。`warnings` 文字(`text-xs`):`no_main`「請把一項肉類設為「主力瘦肉」,系統會算出它每餐需要幾克」(stone-600);`main_no_energy`「主力瘦肉必須是有熱量的食材」(amber-700);`over_target`「固定 + 替換已超過目標 {excessKcal} kcal,主力 0 g」(rose-700;excess 0 時「剛好達到目標,主力 0 g」stone-600);`multiple_main` 不顯示(reducer 保證最多一個主力)。
    - 空清單:`EmptyState`(Utensils)「還沒加入食材」+ 主按鈕「加入食材」。
-5. 動作列:只有一顆 secondary「加入食材」(block)。
+5. 動作列:只有一顆 secondary「加入食材」(block),開啟 `FoodSearchSheet` 抽屜(可複選):
+   - 每列為 toggle(`role="checkbox"`、`aria-checked`、`aria-label` 為食材名),右側 `SafetyBadge` 左邊 20px 圓圈(未選 `border-2 stone-300`;選中 `orange-700` 實心內含白色 `Check` 14px),選中列底 `orange-50`;有毒(「對狗有毒,不可加入」)或已在批次(「已加入」)者 disabled、不顯示圓圈。
+   - 已選項保存在抽屜內(保留勾選順序),換搜尋字不清掉;搜尋框下方有勾選時顯示 `text-xs stone-600`「已選 {n} 項:{名稱以、串接,超過 3 個加…}」+ 右側 ghost「清除」。
+   - 底部 footer 主按鈕(block、lg):「加入 {n} 項」(0 項時「加入食材」並 disabled);按下依勾選順序逐一加入草稿(套用預設角色規則,第一個肉類成主力)後關閉。
+   - 線上查詢 / 手動新增儲存後直接加入並關閉抽屜(已勾選項先一併加入)。
 6. 「餐數」卡(`MealsCountCard`):步進器 − [N] +(1–60,按鈕 44px,`aria-label="減少 1 餐"/"增加 1 餐"`,輸入框 `aria-label="餐數"`)+「餐」;「約可吃 {daysCovered} 天(每日 {mealsPerDay} 餐)」。
 7. 「每餐結果」卡(有食材且有目標時顯示;唯一視覺重點):白卡 + `orange-50` 內層面板;「每餐 {kcal} kcal」(數字 `text-4xl font-bold tabular-nums`)、「/ 目標 {目標} kcal」、`StatusBadge`(與每日相同 90–110% 規則)+「比目標少 X kcal」/「接近目標」/「比目標多 X kcal」、「每餐生重約 {perMealGrams} g」;面板下方「每餐含」列出各食材 `{name} {gramsPerMeal} g`(主力列加小字「主力」orange-700)。
 8. 「採買總量({mealsCount} 餐)」卡:每項 `{name} — {batchGrams} g`(整數不帶小數),最後一行粗體「合計 {batch.totals.grams} g」。
@@ -85,7 +89,7 @@
 
 ### 食材 `pages/FoodsPage.jsx`(分頁 `foods`)
 
-搜尋、篩選、自訂食材新增/編輯/刪除。卡片「加入批次」把食材加入批次草稿並切到 `batch` 分頁。`FoodSearchSheet` / `FoodFormSheet` 在 `context="batch"` 時「儲存並加入」會加入批次草稿(有毒食材只存入食材庫)。
+搜尋、篩選、自訂食材新增/編輯/刪除。卡片「加入批次」把食材加入批次草稿並切到 `batch` 分頁。`FoodSearchSheet`(批次製作的複選抽屜,底部「加入 N 項」)/ `FoodFormSheet` 在 `context="batch"` 時「儲存並加入」會把新食材連同已勾選項加入批次草稿並關閉抽屜(有毒食材只存入食材庫)。
 
 ### 毛孩檔案 `pages/SettingsPage.jsx`
 
