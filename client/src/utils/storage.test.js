@@ -65,8 +65,8 @@ describe('batch draft', () => {
       mealsCount: 4,
       mealTargetOverride: 450,
       items: [
-        { food: { id: 1, name: '雞胸' }, role: 'main', gramsPerMeal: 0 },
-        { food: { id: 3, name: '南瓜' }, role: 'fixed', gramsPerMeal: 50 },
+        { food: { id: 1, name: '雞胸' }, role: 'main', batchGrams: 0 },
+        { food: { id: 3, name: '南瓜' }, role: 'fixed', batchGrams: 200 },
       ],
     };
     saveBatchDraft(draft);
@@ -88,7 +88,9 @@ describe('batch draft', () => {
       '{"mealsCount":2,"mealTargetOverride":0,"items":[]}',
       '{"mealsCount":2,"mealTargetOverride":"450","items":[]}',
       '{"mealsCount":2,"items":[{}]}',
-      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"x","gramsPerMeal":1}]}',
+      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"x","batchGrams":1}]}',
+      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed","batchGrams":-1}]}',
+      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed","batchGrams":"5"}]}',
       '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed","gramsPerMeal":-1}]}',
       '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed"}]}',
       'not json',
@@ -97,6 +99,35 @@ describe('batch draft', () => {
       storage.setItem('furlogic_batch_draft', raw);
       expect(getBatchDraft(), raw).toBeNull();
     }
+  });
+
+  it('migrates the previous gramsPerMeal shape to batchGrams = gramsPerMeal × mealsCount', () => {
+    storage.setItem(
+      'furlogic_batch_draft',
+      JSON.stringify({
+        mealsCount: 4,
+        items: [
+          { food: { id: 1, name: '雞胸' }, role: 'main', gramsPerMeal: 0 },
+          { food: { id: 3, name: '南瓜' }, role: 'fixed', gramsPerMeal: 12.3 },
+          // 兩者皆有時以 batchGrams 為準
+          {
+            food: { id: 2, name: '鯖魚' },
+            role: 'variant',
+            gramsPerMeal: 65,
+            batchGrams: 100,
+          },
+        ],
+      }),
+    );
+    expect(getBatchDraft()).toEqual({
+      mealsCount: 4,
+      mealTargetOverride: null,
+      items: [
+        { food: { id: 1, name: '雞胸' }, role: 'main', batchGrams: 0 },
+        { food: { id: 3, name: '南瓜' }, role: 'fixed', batchGrams: 49.2 },
+        { food: { id: 2, name: '鯖魚' }, role: 'variant', batchGrams: 100 },
+      ],
+    });
   });
 
   it('treats the old servings/grams shape as invalid (no migration)', () => {

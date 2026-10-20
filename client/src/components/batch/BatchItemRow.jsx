@@ -34,11 +34,12 @@ const roleIcon = (food, role) => {
 };
 
 /**
- * 每餐食材的一列:角色圖示、名稱、kcal/100g、警語、本餐 kcal;
- * 角色選單 + 每餐克數控制(主力不輸入,顯示自動補齊克數)。
+ * 食材的一列:角色圖示、名稱、kcal/100g、警語、本餐 kcal;
+ * 角色選單 + 採買總量控制(整批克數,右側顯示換算後的每餐克數);
+ * 主力不輸入,顯示自動補齊的每餐克數與要買的總量。
  * 輸入框保留使用者正在打的字串(例如「12.」),只在外部改變克數時同步。
- * @param {object} item 草稿項目 { food, role, gramsPerMeal }
- * @param {object} [planItem] planGapFill 回傳的同一項(含反推後的 gramsPerMeal、kcalPerMeal)
+ * @param {object} item 草稿項目 { food, role, batchGrams }
+ * @param {object} [planItem] planGapFill 回傳的同一項(含反推後的 gramsPerMeal、batchGrams、kcalPerMeal)
  * @param {object} [capWarning] 該列所屬類別的每餐上限警告 { grams, cap, label }
  */
 export default function BatchItemRow({
@@ -46,13 +47,13 @@ export default function BatchItemRow({
   planItem,
   capWarning,
   onSetRole,
-  onSetGramsPerMeal,
+  onSetBatchGrams,
   onBump,
   onRemove,
 }) {
   const { food, role } = item;
   const isMain = role === 'main';
-  const grams = item.gramsPerMeal;
+  const grams = item.batchGrams;
   const [text, setText] = useState(() => gramsText(grams));
 
   useEffect(() => {
@@ -68,12 +69,13 @@ export default function BatchItemRow({
   const isVeg = isVegetable(food);
   const { Icon, tone } = roleIcon(food, role);
   const kcal = planItem?.kcalPerMeal ?? 0;
-  const mainGrams = planItem?.gramsPerMeal ?? 0;
+  const perMealGrams = planItem?.gramsPerMeal ?? 0;
+  const planBatchGrams = planItem?.batchGrams ?? 0;
 
   const handleChange = (e) => {
     const value = e.target.value.replace(',', '.');
     setText(value);
-    onSetGramsPerMeal(food.id, value.trim() === '' ? 0 : Number(value));
+    onSetBatchGrams(food.id, value.trim() === '' ? 0 : Number(value));
   };
 
   return (
@@ -116,7 +118,7 @@ export default function BatchItemRow({
           <Trash2 size={18} aria-hidden="true" />
         </button>
       </div>
-      <div className="mt-2 flex items-center gap-1 pl-8">
+      <div className="mt-2 flex flex-wrap items-center gap-1 pl-8">
         <select
           value={role}
           onChange={(e) => onSetRole(food.id, e.target.value)}
@@ -136,11 +138,11 @@ export default function BatchItemRow({
           <p
             className={cx(
               'ml-1 flex min-h-11 items-center gap-1.5 text-sm font-semibold tabular-nums',
-              mainGrams > 0 ? 'text-orange-700' : 'text-stone-600',
+              perMealGrams > 0 ? 'text-orange-700' : 'text-stone-600',
             )}
           >
             <Wand2 size={16} className="shrink-0" aria-hidden="true" />
-            自動補齊 {mainGrams} g
+            自動補齊 每餐 {perMealGrams} g · 共買 {planBatchGrams} g
           </p>
         ) : (
           <>
@@ -160,9 +162,9 @@ export default function BatchItemRow({
               placeholder="0"
               onChange={handleChange}
               onBlur={() => setText(gramsText(grams))}
-              aria-label={`${food.name} 每餐克數`}
+              aria-label={`${food.name} 採買總量`}
               className={cx(
-                'h-11 w-14 rounded-xl border border-stone-300 bg-white px-2 text-right text-stone-900 tabular-nums',
+                'h-11 w-16 rounded-xl border border-stone-300 bg-white px-2 text-right text-stone-900 tabular-nums',
                 FOCUS_RING,
               )}
             />
@@ -177,6 +179,10 @@ export default function BatchItemRow({
             >
               <Plus size={18} aria-hidden="true" />
             </button>
+            {/* 放不下時(390px)自動換到下一行 */}
+            <span className="ml-1 text-xs text-stone-600 tabular-nums">
+              每餐 {perMealGrams} g
+            </span>
           </>
         )}
       </div>

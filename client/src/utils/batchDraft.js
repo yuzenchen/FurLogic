@@ -1,15 +1,16 @@
 /**
  * 批次草稿的純函式:reducer 與食材快照。
- * 草稿形狀 { mealsCount: number, mealTargetOverride: number|null, items: [{ food, role, gramsPerMeal }] }
+ * 草稿形狀 { mealsCount: number, mealTargetOverride: number|null, items: [{ food, role, batchGrams }] }
  * (與 utils/storage 的驗證一致)。
  * - mealsCount:製作餐數(整數 1–60)。
  * - mealTargetOverride:本次單餐目標 kcal;null 表示使用毛孩設定。
  * - items[].role:'fixed' 固定班底 / 'variant' 替換肉類 / 'main' 主力瘦肉(最多一個)。
- * - items[].gramsPerMeal:每餐生重;主力的值由 planGapFill 反推,這裡只是保留欄位。
+ * - items[].batchGrams:整批採買總量(生重);每餐克數 = batchGrams ÷ mealsCount,
+ *   在 toPlanItems 換算後交給 planGapFill;主力的值由缺口反推,這裡只是保留欄位。
  */
 import { ITEM_ROLES, defaultGramsPerMeal } from '@furlogic/shared';
 
-export const BUMP_STEP = 10;
+export const BUMP_STEP = 50;
 export const MIN_MEALS_COUNT = 1;
 export const MAX_MEALS_COUNT = 60;
 
@@ -81,20 +82,20 @@ const mapGrams = (state, id, fn) => ({
   ...state,
   items: state.items.map((item) =>
     sameId(item.food.id, id)
-      ? { ...item, gramsPerMeal: fn(item.gramsPerMeal) }
+      ? { ...item, batchGrams: fn(item.batchGrams) }
       : item,
   ),
 });
 
 /**
  * actions:
- * - { type: 'setMealsCount', mealsCount }           整數 1–60
+ * - { type: 'setMealsCount', mealsCount }           整數 1–60;不動 batchGrams(每餐量隨之改變)
  * - { type: 'setMealTargetOverride', mealTarget }   > 0 的 kcal;null / 非法 → null(用毛孩設定)
- * - { type: 'addFood', food }        重複 id 或有毒食材不加入;角色依 defaultRole,克數依 defaultGramsPerMeal
+ * - { type: 'addFood', food }        重複 id 或有毒食材不加入;角色依 defaultRole,總量 = defaultGramsPerMeal × mealsCount
  * - { type: 'removeFood', id }
  * - { type: 'setRole', id, role }    role ∈ ITEM_ROLES;設成 main 時原本的 main 降為 variant
- * - { type: 'setGramsPerMeal', id, grams }   ≥ 0;NaN → 0
- * - { type: 'bump', id, delta }      delta 為正 → +10,負 → −10,下限 0
+ * - { type: 'setBatchGrams', id, grams }   採買總量 ≥ 0;NaN → 0
+ * - { type: 'bump', id, delta }      delta 為正 → +50,負 → −50,下限 0
  * - { type: 'clear' }                清空食材與目標覆寫,保留餐數
  */
 export function batchDraftReducer(state, action) {
@@ -126,7 +127,7 @@ export function batchDraftReducer(state, action) {
           {
             food: snapshotFood(food),
             role: defaultRole(food, state.items),
-            gramsPerMeal: toGrams(defaultGramsPerMeal(food)),
+            batchGrams: toGrams(defaultGramsPerMeal(food) * state.mealsCount),
           },
         ],
       };
@@ -152,7 +153,7 @@ export function batchDraftReducer(state, action) {
         }),
       };
     }
-    case 'setGramsPerMeal':
+    case 'setBatchGrams':
       return mapGrams(state, action.id, () => toGrams(action.grams));
     case 'bump': {
       const step = action.delta < 0 ? -BUMP_STEP : BUMP_STEP;
@@ -165,10 +166,15 @@ export function batchDraftReducer(state, action) {
   }
 }
 
-/** 草稿 items 攤平成 shared planGapFill 用的形狀 */
-export const toPlanItems = (items = []) =>
-  items.map(({ food, role, gramsPerMeal }) => ({
+/**
+ * 草稿 items 攤平成 shared planGapFill 用的形狀:採買總量 ÷ 餐數 → 每餐克數
+ * (不四捨五入,取位交給 shared)。餐數非法時以 1 計。
+ */
+export const toPlanItems = (items = [], mealsCount = 1) => {
+  const n = Number.isFinite(mealsCount) && mealsCount >= 1 ? mealsCount : 1;
+  return items.map(({ food, role, batchGrams }) => ({
     ...food,
     role,
-    gramsPerMeal,
+    gramsPerMeal: batchGrams / n,
   }));
+};

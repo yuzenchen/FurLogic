@@ -183,9 +183,25 @@ describe('batchDraftReducer', () => {
     ]);
   });
 
-  it('addFood defaults gramsPerMeal from the meal caps (veg 50 / organ 12 / fatty fish 65 / else 0)', () => {
+  it('addFood defaults batchGrams to the meal cap × mealsCount (veg 50 / organ 12 / fatty fish 65 / else 0)', () => {
     const s = run(empty, add(pumpkin), add(liver), add(mackerel), add(rice));
-    expect(s.items.map((i) => i.gramsPerMeal)).toEqual([50, 12, 65, 0]);
+    expect(s.items.map((i) => i.batchGrams)).toEqual([100, 24, 130, 0]);
+    const t = run(
+      empty,
+      { type: 'setMealsCount', mealsCount: 5 },
+      add(pumpkin),
+      add(liver),
+    );
+    expect(t.items.map((i) => i.batchGrams)).toEqual([250, 60]);
+  });
+
+  it('setMealsCount keeps batchGrams untouched (per-meal grams change instead)', () => {
+    const s = run(empty, add(pumpkin), {
+      type: 'setMealsCount',
+      mealsCount: 10,
+    });
+    expect(s.items[0].batchGrams).toBe(100);
+    expect(toPlanItems(s.items, s.mealsCount)[0].gramsPerMeal).toBe(10);
   });
 
   it('removes a food by id', () => {
@@ -227,11 +243,10 @@ describe('batchDraftReducer', () => {
     ).toBe(base);
   });
 
-  it('setGramsPerMeal clamps to ≥ 0, one decimal, and turns NaN into 0', () => {
+  it('setBatchGrams clamps to ≥ 0, one decimal, and turns NaN into 0', () => {
     const base = run(empty, add(chicken));
     const grams = (g) =>
-      run(base, { type: 'setGramsPerMeal', id: 1, grams: g }).items[0]
-        .gramsPerMeal;
+      run(base, { type: 'setBatchGrams', id: 1, grams: g }).items[0].batchGrams;
     expect(grams(100)).toBe(100);
     expect(grams(-5)).toBe(0);
     expect(grams(NaN)).toBe(0);
@@ -239,17 +254,17 @@ describe('batchDraftReducer', () => {
     expect(grams('12.56')).toBe(12.6);
   });
 
-  it('bump steps by 10 with a floor of 0', () => {
+  it('bump steps by 50 with a floor of 0', () => {
     const base = run(empty, add(chicken), {
-      type: 'setGramsPerMeal',
+      type: 'setBatchGrams',
       id: 1,
-      grams: 5,
+      grams: 20,
     });
     expect(
-      run(base, { type: 'bump', id: 1, delta: 1 }).items[0].gramsPerMeal,
-    ).toBe(15);
+      run(base, { type: 'bump', id: 1, delta: 1 }).items[0].batchGrams,
+    ).toBe(70);
     expect(
-      run(base, { type: 'bump', id: 1, delta: -1 }).items[0].gramsPerMeal,
+      run(base, { type: 'bump', id: 1, delta: -1 }).items[0].batchGrams,
     ).toBe(0);
   });
 
@@ -270,18 +285,27 @@ describe('batchDraftReducer', () => {
 });
 
 describe('toPlanItems', () => {
-  it('merges food fields with role and gramsPerMeal', () => {
-    const s = run(empty, add(mackerel), {
-      type: 'setGramsPerMeal',
-      id: 2,
-      grams: 40,
-    });
-    expect(toPlanItems(s.items)[0]).toMatchObject({
+  it('merges food fields with role and gramsPerMeal = batchGrams ÷ mealsCount (unrounded)', () => {
+    const s = run(
+      empty,
+      { type: 'setMealsCount', mealsCount: 3 },
+      add(mackerel),
+      { type: 'setBatchGrams', id: 2, grams: 100 },
+    );
+    const [plan] = toPlanItems(s.items, s.mealsCount);
+    expect(plan).toMatchObject({
       name: '鯖魚',
       subtype: 'fatty_fish',
       calories: 205,
       role: 'main',
-      gramsPerMeal: 40,
     });
+    expect(plan.gramsPerMeal).toBeCloseTo(100 / 3, 10);
+    expect(plan).not.toHaveProperty('batchGrams');
+  });
+
+  it('treats a missing or invalid mealsCount as 1', () => {
+    const s = run(empty, add(pumpkin));
+    expect(toPlanItems(s.items)[0].gramsPerMeal).toBe(100);
+    expect(toPlanItems(s.items, 0)[0].gramsPerMeal).toBe(100);
   });
 });

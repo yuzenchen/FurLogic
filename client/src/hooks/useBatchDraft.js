@@ -30,8 +30,8 @@ export default function useBatchDraft() {
       addFood: (food) => dispatch({ type: 'addFood', food }),
       removeFood: (id) => dispatch({ type: 'removeFood', id }),
       setRole: (id, role) => dispatch({ type: 'setRole', id, role }),
-      setGramsPerMeal: (id, grams) =>
-        dispatch({ type: 'setGramsPerMeal', id, grams }),
+      setBatchGrams: (id, grams) =>
+        dispatch({ type: 'setBatchGrams', id, grams }),
       bump: (id, delta) => dispatch({ type: 'bump', id, delta }),
       clear: () => dispatch({ type: 'clear' }),
     }),

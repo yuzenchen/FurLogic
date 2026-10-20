@@ -39,7 +39,7 @@ const statusText = (status, diff) => {
 /** 克數顯示:整數不帶小數,其餘一位小數 */
 const fmtGrams = (g) => (Number.isInteger(g) ? String(g) : g.toFixed(1));
 
-/** 批次製作:固定班底 + 替換肉類 → 缺口由主力瘦肉補齊 → 採買總量(不存伺服器) */
+/** 批次製作:輸入各食材採買總量與餐數 → 每餐克數;缺口由主力瘦肉補齊(不存伺服器) */
 export default function BatchPage() {
   const { metrics } = usePet();
   const draft = useBatchDraft();
@@ -54,7 +54,10 @@ export default function BatchPage() {
   const mealTarget = Math.round(mealTargetRaw);
   const hasTarget = mealTargetRaw > 0;
 
-  const planItems = useMemo(() => toPlanItems(items), [items]);
+  const planItems = useMemo(
+    () => toPlanItems(items, mealsCount),
+    [items, mealsCount],
+  );
   const plan = useMemo(
     () =>
       planGapFill({
@@ -91,7 +94,7 @@ export default function BatchPage() {
     <>
       <PageHeader
         title="批次製作"
-        subtitle="固定班底 + 替換肉類,缺口由主力瘦肉補齊"
+        subtitle="輸入採買總量與餐數,主力瘦肉依熱量缺口補齊"
         action={
           hasItems && (
             <Button
@@ -125,11 +128,14 @@ export default function BatchPage() {
         className="mb-4"
       >
         <h2 id="batch-items-title" className="font-semibold text-stone-900">
-          每餐食材
+          食材與採買總量
         </h2>
         {hasItems ? (
           <>
-            <ul className="divide-y divide-stone-100" aria-label="每餐食材">
+            <ul
+              className="divide-y divide-stone-100"
+              aria-label="食材與採買總量"
+            >
               {items.map((item, i) => (
                 <BatchItemRow
                   key={item.food.id ?? item.food.name}
@@ -137,7 +143,7 @@ export default function BatchPage() {
                   planItem={plan.items[i]}
                   capWarning={capWarningByKind.get(capKindOf(item.food))}
                   onSetRole={draft.setRole}
-                  onSetGramsPerMeal={draft.setGramsPerMeal}
+                  onSetBatchGrams={draft.setBatchGrams}
                   onBump={draft.bump}
                   onRemove={draft.removeFood}
                 />
@@ -184,7 +190,6 @@ export default function BatchPage() {
       {showResult && (
         <>
           <PerMealCard plan={plan} mealTarget={mealTarget} className="mb-4" />
-          <PurchaseCard plan={plan} className="mb-4" />
           <div className="mb-4">
             <MealAnalysisCard
               title="每餐營養"
@@ -295,7 +300,7 @@ const WARNING_TEXT = {
   },
 };
 
-/** 每餐食材卡底:固定 / 替換 / 缺口 + 警告文字 */
+/** 食材卡底:固定 / 替換 / 缺口 + 警告文字 */
 function GapSummary({ plan }) {
   const { fixedKcal, variantKcal, gapKcal, warnings } = plan;
   const lines = warnings.flatMap((w) => {
@@ -480,46 +485,17 @@ function PerMealCard({ plan, mealTarget, className }) {
                 </span>
                 <span className="shrink-0 tabular-nums">
                   {fmtGrams(item.gramsPerMeal)} g
+                  {item.isMain && (
+                    <span className="ml-1 text-xs text-stone-600">
+                      (共買 {fmtGrams(item.batchGrams)} g)
+                    </span>
+                  )}
                 </span>
               </li>
             ))}
           </ul>
         </section>
       )}
-    </Card>
-  );
-}
-
-/** 採買總量:每餐克數 × 餐數 */
-function PurchaseCard({ plan, className }) {
-  const { items, mealsCount, batch } = plan;
-  const rows = items.filter((item) => item.batchGrams > 0);
-
-  return (
-    <Card
-      as="section"
-      aria-labelledby="batch-purchase-title"
-      className={cx('space-y-2', className)}
-    >
-      <h2 id="batch-purchase-title" className="font-semibold text-stone-900">
-        採買總量({mealsCount} 餐)
-      </h2>
-      <ul className="space-y-1">
-        {rows.map((item) => (
-          <li
-            key={item.id ?? item.name}
-            className="flex items-baseline justify-between gap-3 text-sm text-stone-800"
-          >
-            <span className="min-w-0 break-words">{item.name}</span>
-            <span className="shrink-0 tabular-nums">
-              {fmtGrams(item.batchGrams)} g
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="border-t border-stone-200 pt-2 text-right text-sm font-semibold text-stone-900 tabular-nums">
-        合計 {fmtGrams(batch.totals.grams)} g
-      </p>
     </Card>
   );
 }

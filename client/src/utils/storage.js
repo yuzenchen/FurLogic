@@ -89,13 +89,26 @@ export const saveActiveTab = (tab) => {
 };
 
 // === 批次草稿 ===
+const isValidGrams = (g) => Number.isFinite(g) && g >= 0;
+
+/** 草稿項目:batchGrams(現行)或 gramsPerMeal(舊形狀,讀取時換算)其一有效即可 */
 const isValidDraftItem = (item) =>
   isPlainObject(item) &&
   isPlainObject(item.food) &&
   typeof item.food.name === 'string' &&
   ITEM_ROLES.includes(item.role) &&
-  Number.isFinite(item.gramsPerMeal) &&
-  item.gramsPerMeal >= 0;
+  (item.batchGrams !== undefined
+    ? isValidGrams(item.batchGrams)
+    : isValidGrams(item.gramsPerMeal));
+
+const round1 = (n) => Math.round(n * 10) / 10;
+
+/** 舊形狀 { gramsPerMeal } → { batchGrams = round1(gramsPerMeal × mealsCount) } */
+const normalizeDraftItem = (item, mealsCount) => {
+  const { gramsPerMeal, ...rest } = item;
+  if (item.batchGrams !== undefined) return rest;
+  return { ...rest, batchGrams: round1(gramsPerMeal * mealsCount) };
+};
 
 const isValidMealsCount = (n) => Number.isInteger(n) && n >= 1 && n <= 60;
 
@@ -104,8 +117,9 @@ const isValidTargetOverride = (v) =>
 
 /**
  * 讀批次草稿;順便清掉已停用的單餐草稿 key。格式不符回 null。
- * 舊形狀(servings / grams / vegWeightPct)不遷移,直接視為無效。
- * @returns {{ mealsCount: number, mealTargetOverride: number|null, items: Array<{ food: object, role: string, gramsPerMeal: number }> } | null}
+ * 相容舊形狀:item 只有 gramsPerMeal(無 batchGrams)→ batchGrams = round1(gramsPerMeal × mealsCount)。
+ * 更舊的形狀(servings / grams / vegWeightPct)不遷移,直接視為無效。
+ * @returns {{ mealsCount: number, mealTargetOverride: number|null, items: Array<{ food: object, role: string, batchGrams: number }> } | null}
  */
 export const getBatchDraft = () => {
   removeRaw(KEYS.LEGACY_SINGLE_DRAFT);
@@ -122,7 +136,9 @@ export const getBatchDraft = () => {
   return {
     mealsCount: draft.mealsCount,
     mealTargetOverride: draft.mealTargetOverride ?? null,
-    items: draft.items,
+    items: draft.items.map((item) =>
+      normalizeDraftItem(item, draft.mealsCount),
+    ),
   };
 };
 
