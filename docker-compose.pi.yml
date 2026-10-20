@@ -1,0 +1,61 @@
+# 樹莓派（Pi 5，aarch64 / 2GB）正式版：一鍵 build + 啟動
+#   docker compose -f docker-compose.pi.yml up -d --build
+# 之後在家用網路用瀏覽器開 http://<Pi 的 IP>:8080 即可。
+#
+# port：web 對外 8080。Pi 上 80/443/3000/3001/3002/3100 已被綠葉專案占用、
+#       8088 已被 jojo 占用，8080 目前空著。api 不對外開 port，只由 web（nginx）反代 /api。
+# 資料：SQLite 落在 Pi 上的 ./data/furlogic.db（bind mount ./data:/data，不用 named volume），
+#       備份＝直接複製整個 data 資料夾（含 furlogic.db-wal / -shm，建議先 stop api 再複製）。
+#       首次啟動前先 `mkdir -p data`，讓資料夾屬於登入使用者（uid 1000，與容器內 node 使用者相同），
+#       否則由 Docker 自動建立會是 root 所有，api 無法寫入。
+# 設定：api 讀同目錄的 .env（ALLOWED_ORIGINS、TZ、金鑰…）。改 .env 後要重建 api 容器才會生效：
+#   docker compose -f docker-compose.pi.yml up -d --force-recreate api
+# 更新：git pull 後重跑第一行即可。
+# 對外（Cloudflare Tunnel）：web 另外加入外部既有的 network bfx-multi_default
+#       （Pi 上 Cloudflare Tunnel 容器 bfx-cloudflared 所在，由另一個 compose 專案建立），
+#       Tunnel 的 Service 填 http://furlogic-web:80。api 不加入該 network，只讓 nginx 對外。
+#       若該 network 不存在（例如別台機器）compose 會直接報錯；本機開發請改用 docker-compose.yml。
+services:
+  api:
+    container_name: furlogic-api
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      # 容器內固定用 /data（對應 Pi 上的 ./data）；TZ 由 .env 提供
+      DATA_DIR: /data
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  web:
+    container_name: furlogic-web
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 64m
+    networks:
+      default:
+      tunnel:
+        aliases: [furlogic]
+
+networks:
+  tunnel:
+    name: bfx-multi_default
+    external: true

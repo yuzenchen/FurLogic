@@ -14,6 +14,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // 不產 sourcemap:nginx 會把 dist 內所有檔案(含 .map)公開出去
+    sourcemap: false,
   },
 });

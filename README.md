@@ -23,7 +23,8 @@ FurLogic/
 ├── docker/      # nginx 設定 (web 映像使用)
 ├── Dockerfile.api
 ├── Dockerfile.web
-└── docker-compose.yml
+├── docker-compose.yml     # 本機 Docker(port 8080,named volume)
+└── docker-compose.pi.yml  # 樹莓派正式版(port 8080,資料在 ./data)
 ```
 
 資料存在 SQLite:`${DATA_DIR}/furlogic.db`。
@@ -50,7 +51,7 @@ npm run format:check  # 檢查格式
 npm run build         # 建置
 ```
 
-## Docker 啟動
+## Docker 啟動(本機)
 
 ```bash
 cp .env.example .env
@@ -62,7 +63,7 @@ docker compose down      # 保留 furlogic-data volume(資料仍在)
 docker compose down -v   # 連同資料一起刪除
 ```
 
-映像支援多架構,可在 Raspberry Pi (arm64) 上執行。交叉建置範例:
+映像支援多架構,可在 Raspberry Pi (arm64) 上執行(部署方式見下方「正式版部署(樹莓派)」)。交叉建置範例:
 
 ```bash
 docker buildx build --platform linux/arm64 -f Dockerfile.api .
@@ -90,12 +91,41 @@ docker buildx build --platform linux/arm64 -f Dockerfile.api .
 
 若瀏覽器中有舊版(localStorage)的毛孩資料,App 會提供一鍵匯入。
 
-## 部署規劃
+## 正式版部署（樹莓派）
 
-- 已移除 GitHub Pages 部署。
-- 前端將移至 **Cloudflare Pages**,build 時設定 `VITE_API_URL` 指向 API。
-- API 將以容器形式在 **Raspberry Pi** 上執行,並依前端網域設定 `ALLOWED_ORIGINS`。
-- 存取控制預計使用 **Cloudflare Access**(尚未完成)。
+開發模式(Vite dev server)吃幾百 MB 記憶體,**不要**放到 Pi 上跑。正式版是兩個容器:`web`(nginx 托管靜態檔 + 反代 `/api`)與 `api`(Fastify + better-sqlite3)。記憶體上限 web 64 MB、api 256 MB,Pi 5 2 GB 足夠。base image 都是多架構(amd64 / arm64),直接在 Pi 上 build。
+
+前提:Pi 已安裝 Docker(含 Compose)。
+
+```bash
+git clone https://github.com/yuzenchen/FurLogic.git ~/FurLogic
+cd ~/FurLogic
+cp .env.example .env   # ALLOWED_ORIGINS 加上 http://<Pi IP>:8080,例:http://192.168.8.192:8080
+mkdir -p data          # 先自己建,資料夾才會屬於登入使用者(容器內以 uid 1000 寫入)
+docker compose -f docker-compose.pi.yml up -d --build
+```
+
+家用網路用瀏覽器開 `http://<Pi 的 IP>:8080` 即可(port 避開了綠葉專案的 80/443/3000/3001/3002/3100 與 jojo 的 8088)。
+
+- `.env` 的 `GEMINI_API_KEY` / `USDA_API_KEY` 可留空:線上查詢會回 503,App 退回手動輸入。
+- **更新**:`git pull` 後重跑同一行 `docker compose -f docker-compose.pi.yml up -d --build`。
+- **改 `.env` 後**:`docker compose -f docker-compose.pi.yml up -d --force-recreate api`(env_file 只在建立容器時讀取)。
+- **資料**:落在 Pi 上的 `./data/furlogic.db`(SQLite,bind mount `./data:/data`,不用 named volume)。**備份＝複製 `data/` 資料夾**(含 `furlogic.db-wal` / `-shm`;建議先 `docker compose -f docker-compose.pi.yml stop api` 再複製)。
+- 查看紀錄:`docker logs -f furlogic-api`、`docker logs -f furlogic-web`。
+
+### 對外存取（Cloudflare Tunnel）
+
+Pi 上已有 Cloudflare Tunnel 容器 `bfx-cloudflared`(token 模式,路由在 Cloudflare Zero Trust 儀表板管理)。`docker-compose.pi.yml` 已讓 FurLogic 的 `web` 容器加入它所在的 network `bfx-multi_default`(`api` 不加入,只讓 nginx 對外)。若該 network 不存在(例如別台機器),compose 會直接報錯——本機開發請用 `docker-compose.yml`。
+
+1. Zero Trust → Networks → Tunnels → 選該 tunnel → Public Hostname → Add。
+2. Subdomain `furlogic`、網域 `yuzen.tw`(實際依自己的網域決定)。
+3. Service:Type `HTTP`、URL `furlogic-web:80`。
+
+> ⚠️ 加上公開網址後等於全網可連,而目前 App 沒有登入機制。**建議同時在 Zero Trust → Access → Applications 幫該 hostname 加 Access 政策**(例如只允許自己的 email)。
+
+`ALLOWED_ORIGINS` 不必加公開網址:前端走同源 `/api`(由 nginx 反代到 api),瀏覽器不會對同源請求做 CORS 檢查。只有前端與 API 不同源(例如之後前端改放 Cloudflare Pages、`VITE_API_URL` 指向別的網域)時,才需要把前端網域加進 `ALLOWED_ORIGINS`。
+
+Cloudflare Pages 前端之後再評估。
 
 ## CI
 
