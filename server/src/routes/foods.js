@@ -4,7 +4,7 @@ import {
   pickColumns,
 } from '../db/mappers.js';
 import { ApiError, notFound } from '../errors.js';
-import { idParams, nullableString } from './schemas.js';
+import { idParams, nullableString, nullableSubtype } from './schemas.js';
 
 const FOOD_TYPES = ['protein', 'veg', 'fruit', 'starch', 'snack'];
 const RECIPE_ROLES = ['protein', 'plant', 'excluded'];
@@ -19,6 +19,7 @@ const foodFields = {
   nameEn: nullableString(80),
   type: { type: 'string', enum: FOOD_TYPES },
   recipeRole: { type: 'string', enum: RECIPE_ROLES },
+  subtype: nullableSubtype,
   safety: { type: 'string', enum: SAFETY },
   warning: nullableString(500),
   description: nullableString(500),

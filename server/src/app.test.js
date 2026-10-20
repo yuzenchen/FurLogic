@@ -1,8 +1,24 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FOOD_DATABASE } from '@furlogic/shared';
 import { buildApp } from './app.js';
+import { openDatabase } from './db/connection.js';
+import { runMigrations } from './db/migrate.js';
+
+/** 只含 001 的 migrations 目錄(模擬尚未升級的舊 DB)。 */
+const LEGACY_MIGRATIONS_DIR = mkdtempSync(
+  path.join(tmpdir(), 'furlogic-legacy-mig-'),
+);
+copyFileSync(
+  path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    'db/migrations/001_init.sql',
+  ),
+  path.join(LEGACY_MIGRATIONS_DIR, '001_init.sql'),
+);
 
 const config = {
   port: 0,
@@ -141,10 +157,10 @@ describe('FurLogic API', () => {
   });
 
   describe('foods', () => {
-    it('GET /api/foods returns 37 builtin foods ordered by id', async () => {
+    it('GET /api/foods returns 45 builtin foods ordered by id', async () => {
       const res = await req('GET', '/api/foods');
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(37);
+      expect(res.body).toHaveLength(45);
       const ids = res.body.map((f) => f.id);
       expect(ids).toEqual([...ids].sort((a, b) => a - b));
       expect(res.body[0]).toMatchObject({
@@ -154,7 +170,28 @@ describe('FurLogic API', () => {
         isBuiltin: true,
         description: '低脂優質蛋白,鮮食基底。',
         nameEn: null,
+        subtype: null,
       });
+    });
+
+    it('builtin subtype: 鯖魚 fatty_fish、雞肝 organ、鴨內臟(綜合) organ', async () => {
+      const { body } = await req('GET', '/api/foods');
+      const byId = new Map(body.map((f) => [f.id, f]));
+      expect(byId.get(17)).toMatchObject({
+        name: '鯖魚',
+        subtype: 'fatty_fish',
+      });
+      expect(byId.get(6).subtype).toBe('fatty_fish');
+      expect(byId.get(15).subtype).toBe('organ');
+      expect(byId.get(16).subtype).toBe('organ');
+      expect(byId.get(43)).toMatchObject({
+        name: '鴨內臟(綜合)',
+        subtype: 'organ',
+        safety: 'safe',
+        calories: 150,
+      });
+      expect(byId.get(38)).toMatchObject({ name: '白飯(熟)', calories: 130 });
+      expect(byId.get(1).subtype).toBeNull();
     });
 
     it('q filter matches name or nameEn case-insensitively', async () => {
@@ -182,10 +219,10 @@ describe('FurLogic API', () => {
       const usda = await req('GET', '/api/foods?source=usda');
       expect(usda.body.map((f) => f.name)).toEqual(['鴨肉']);
       const builtin = await req('GET', '/api/foods?source=builtin');
-      expect(builtin.body).toHaveLength(37);
+      expect(builtin.body).toHaveLength(45);
       const all = await req('GET', '/api/foods');
-      expect(all.body).toHaveLength(39);
-      expect(all.body.slice(0, 37).every((f) => f.isBuiltin)).toBe(true);
+      expect(all.body).toHaveLength(47);
+      expect(all.body.slice(0, 45).every((f) => f.isBuiltin)).toBe(true);
     });
 
     it('POST /api/foods → 201 with id ≥ 1000 and default safety', async () => {
@@ -231,6 +268,47 @@ describe('FurLogic API', () => {
       const del = await req('DELETE', '/api/foods/1');
       expect(del.status).toBe(403);
       expect(del.body.error).toBe('builtin_readonly');
+    });
+
+    it('POST/PUT custom food subtype: valid values stored, invalid → 400', async () => {
+      const created = await req(
+        'POST',
+        '/api/foods',
+        customFood({ subtype: 'fatty_fish' }),
+      );
+      expect(created.status).toBe(201);
+      expect(created.body.subtype).toBe('fatty_fish');
+
+      const plain = await req(
+        'POST',
+        '/api/foods',
+        customFood({ name: '雞心' }),
+      );
+      expect(plain.body.subtype).toBeNull();
+
+      const toOrgan = await req('PUT', `/api/foods/${plain.body.id}`, {
+        subtype: 'organ',
+      });
+      expect(toOrgan.status).toBe(200);
+      expect(toOrgan.body.subtype).toBe('organ');
+
+      const cleared = await req('PUT', `/api/foods/${plain.body.id}`, {
+        subtype: null,
+      });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.subtype).toBeNull();
+
+      const bad = await req('PUT', `/api/foods/${plain.body.id}`, {
+        subtype: 'bone',
+      });
+      expect(bad.status).toBe(400);
+      expect(bad.body.error).toBe('validation_error');
+      const badPost = await req(
+        'POST',
+        '/api/foods',
+        customFood({ name: '魚卵', subtype: 'roe' }),
+      );
+      expect(badPost.status).toBe(400);
     });
 
     it('PUT custom food updates; renaming onto existing name → 409', async () => {
@@ -322,8 +400,8 @@ describe('file-backed database', () => {
     const second = await buildApp({ dbPath, config });
     const foods = (await second.inject('/api/foods')).json();
     const pets = (await second.inject('/api/pets')).json();
-    expect(foods.filter((f) => f.isBuiltin)).toHaveLength(37);
-    expect(foods).toHaveLength(38);
+    expect(foods.filter((f) => f.isBuiltin)).toHaveLength(45);
+    expect(foods).toHaveLength(46);
     expect(pets).toHaveLength(1);
     const after = second.db
       .prepare('SELECT updated_at FROM foods WHERE id = 1')
@@ -332,7 +410,52 @@ describe('file-backed database', () => {
     const versions = second.db
       .prepare('SELECT version FROM schema_migrations')
       .all();
-    expect(versions).toEqual([{ version: 1 }]);
+    expect(versions).toEqual([{ version: 1 }, { version: 2 }]);
     await second.close();
+  });
+
+  it('migration 002 applies to a DB that only has 001, and seed backfills subtype', async () => {
+    const dbPath = path.join(dir, 'legacy.db');
+    // 模擬舊版 DB:只套用 001,並以舊版 seed(無 subtype 欄位)塞入 37 筆內建食材。
+    const legacy = openDatabase(dbPath);
+    runMigrations(legacy, LEGACY_MIGRATIONS_DIR);
+    const now = '2026-01-01T00:00:00.000Z';
+    const insert = legacy.prepare(`
+      INSERT INTO foods (id, name, type, recipe_role, safety, warning, description,
+        calories, protein, fat, ca, p, source, is_builtin, created_at, updated_at)
+      VALUES (@id, @name, @type, @recipeRole, @safety, @warning, @desc,
+        @calories, @protein, @fat, @ca, @p, 'builtin', 1, @now, @now)
+    `);
+    const oldFoods = FOOD_DATABASE.filter((f) => f.id <= 37);
+    expect(oldFoods).toHaveLength(37);
+    oldFoods.forEach((f) => insert.run({ ...f, now }));
+    expect(
+      legacy.prepare('SELECT version FROM schema_migrations').all(),
+    ).toEqual([{ version: 1 }]);
+    expect(
+      legacy
+        .prepare('PRAGMA table_info(foods)')
+        .all()
+        .map((c) => c.name),
+    ).not.toContain('subtype');
+    legacy.close();
+
+    const app = await buildApp({ dbPath, config });
+    const versions = app.db
+      .prepare('SELECT version FROM schema_migrations')
+      .all();
+    expect(versions).toEqual([{ version: 1 }, { version: 2 }]);
+    const foods = (await app.inject('/api/foods')).json();
+    expect(foods).toHaveLength(45);
+    const byId = new Map(foods.map((f) => [f.id, f]));
+    expect(byId.get(17).subtype).toBe('fatty_fish');
+    expect(byId.get(6).subtype).toBe('fatty_fish');
+    expect(byId.get(15).subtype).toBe('organ');
+    expect(byId.get(16).subtype).toBe('organ');
+    expect(byId.get(43).subtype).toBe('organ');
+    // 只有 subtype 變動的 15/16/6/17 會更新 updated_at;內容未變的 1 不動
+    expect(byId.get(17).updatedAt).not.toBe(now);
+    expect(byId.get(1).updatedAt).toBe(now);
+    await app.close();
   });
 });

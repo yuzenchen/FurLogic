@@ -33,10 +33,11 @@ describe('index re-exports', () => {
     expect(typeof shared.computeMacros).toBe('function');
     expect(typeof shared.buildSupplements).toBe('function');
     expect(typeof shared.analyzeMeal).toBe('function');
-    expect(typeof shared.planBatch).toBe('function');
+    expect(typeof shared.planGapFill).toBe('function');
+    expect(shared.planBatch).toBeUndefined();
     expect(shared.toDateKey).toBeUndefined();
     expect(shared.MEAL_LABELS).toBeUndefined();
-    expect(shared.FOOD_DATABASE).toHaveLength(37);
+    expect(shared.FOOD_DATABASE).toHaveLength(45);
     expect(shared.MEALS_PER_DAY).toBe(2);
     expect(shared.DEFAULT_MEALS_PER_DAY).toBe(2);
   });

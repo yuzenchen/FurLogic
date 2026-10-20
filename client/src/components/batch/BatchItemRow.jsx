@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Drumstick, Leaf, Minus, Plus, Trash2 } from 'lucide-react';
+import {
+  Beef,
+  Drumstick,
+  Fish,
+  Leaf,
+  Minus,
+  Plus,
+  Trash2,
+  Wand2,
+} from 'lucide-react';
 import { FOCUS_RING, cx } from '../ui';
-import { isVegetable } from '@furlogic/shared';
+import { ITEM_ROLES, ITEM_ROLE_LABELS, isVegetable } from '@furlogic/shared';
 import { BUMP_STEP } from '../../utils/batchDraft';
 
 const ICON_BUTTON = cx(
@@ -11,13 +20,39 @@ const ICON_BUTTON = cx(
 
 const gramsText = (grams) => (grams > 0 ? String(grams) : '');
 
+/** 角色圖示:主力 Drumstick(橘)、替換 Beef / Fish(高脂魚)、固定 Leaf;蔬菜一律 Leaf */
+const roleIcon = (food, role) => {
+  if (isVegetable(food)) return { Icon: Leaf, tone: 'text-emerald-600' };
+  if (role === 'main') return { Icon: Drumstick, tone: 'text-orange-500' };
+  if (role === 'variant') {
+    return {
+      Icon: food.subtype === 'fatty_fish' ? Fish : Beef,
+      tone: 'text-stone-700',
+    };
+  }
+  return { Icon: Leaf, tone: 'text-emerald-600' };
+};
+
 /**
- * 整鍋中的一項食材:圖示、名稱、每 100g 熱量、警語、整鍋克數調整、本項熱量。
- * 蔬菜不計熱量,改顯示「不計熱量」。
+ * 每餐食材的一列:角色圖示、名稱、kcal/100g、警語、本餐 kcal;
+ * 角色選單 + 每餐克數控制(主力不輸入,顯示自動補齊克數)。
  * 輸入框保留使用者正在打的字串(例如「12.」),只在外部改變克數時同步。
+ * @param {object} item 草稿項目 { food, role, gramsPerMeal }
+ * @param {object} [planItem] planGapFill 回傳的同一項(含反推後的 gramsPerMeal、kcalPerMeal)
+ * @param {object} [capWarning] 該列所屬類別的每餐上限警告 { grams, cap, label }
  */
-export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
-  const { food, grams } = item;
+export default function BatchItemRow({
+  item,
+  planItem,
+  capWarning,
+  onSetRole,
+  onSetGramsPerMeal,
+  onBump,
+  onRemove,
+}) {
+  const { food, role } = item;
+  const isMain = role === 'main';
+  const grams = item.gramsPerMeal;
   const [text, setText] = useState(() => gramsText(grams));
 
   useEffect(() => {
@@ -30,26 +65,23 @@ export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
     });
   }, [grams]);
 
-  const isProtein = food.recipeRole === 'protein';
-  const RoleIcon = isProtein ? Drumstick : Leaf;
   const isVeg = isVegetable(food);
-  const kcal = isVeg ? 0 : Math.round(((food.calories ?? 0) * grams) / 100);
+  const { Icon, tone } = roleIcon(food, role);
+  const kcal = planItem?.kcalPerMeal ?? 0;
+  const mainGrams = planItem?.gramsPerMeal ?? 0;
 
   const handleChange = (e) => {
     const value = e.target.value.replace(',', '.');
     setText(value);
-    onSetGrams(food.id, value.trim() === '' ? 0 : Number(value));
+    onSetGramsPerMeal(food.id, value.trim() === '' ? 0 : Number(value));
   };
 
   return (
     <li className="py-3">
       <div className="flex items-start gap-3">
-        <RoleIcon
+        <Icon
           size={20}
-          className={cx(
-            'mt-0.5 shrink-0',
-            isProtein ? 'text-orange-500' : 'text-emerald-600',
-          )}
+          className={cx('mt-0.5 shrink-0', tone)}
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
@@ -71,46 +103,12 @@ export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
             </span>
           </p>
         )}
-      </div>
-      <div className="mt-2 flex items-center gap-1 pl-8">
-        <button
-          type="button"
-          className={ICON_BUTTON}
-          onClick={() => onBump(food.id, -BUMP_STEP)}
-          aria-label={`${food.name} 減少 ${BUMP_STEP} 克`}
-          disabled={grams <= 0}
-        >
-          <Minus size={18} aria-hidden="true" />
-        </button>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={text}
-          placeholder="0"
-          onChange={handleChange}
-          onBlur={() => setText(gramsText(grams))}
-          aria-label={`${food.name} 整鍋克數`}
-          className={cx(
-            'h-11 w-20 rounded-xl border border-stone-300 bg-white px-3 text-right text-stone-900 tabular-nums',
-            FOCUS_RING,
-          )}
-        />
-        <span className="text-sm text-stone-600" aria-hidden="true">
-          g
-        </span>
-        <button
-          type="button"
-          className={ICON_BUTTON}
-          onClick={() => onBump(food.id, BUMP_STEP)}
-          aria-label={`${food.name} 增加 ${BUMP_STEP} 克`}
-        >
-          <Plus size={18} aria-hidden="true" />
-        </button>
+        {/* 移除鈕放第一行,第二行才塞得下角色選單 + 步進器(390px) */}
         <button
           type="button"
           className={cx(
             ICON_BUTTON,
-            'ml-auto text-stone-600 hover:text-rose-700',
+            '-mt-2 -mr-2 text-stone-600 hover:text-rose-700',
           )}
           onClick={() => onRemove(food.id)}
           aria-label={`移除 ${food.name}`}
@@ -118,6 +116,76 @@ export default function BatchItemRow({ item, onSetGrams, onBump, onRemove }) {
           <Trash2 size={18} aria-hidden="true" />
         </button>
       </div>
+      <div className="mt-2 flex items-center gap-1 pl-8">
+        <select
+          value={role}
+          onChange={(e) => onSetRole(food.id, e.target.value)}
+          aria-label={`${food.name} 角色`}
+          className={cx(
+            'h-11 rounded-xl border border-stone-300 bg-white px-2 text-sm text-stone-900',
+            FOCUS_RING,
+          )}
+        >
+          {ITEM_ROLES.map((value) => (
+            <option key={value} value={value}>
+              {ITEM_ROLE_LABELS[value]}
+            </option>
+          ))}
+        </select>
+        {isMain ? (
+          <p
+            className={cx(
+              'ml-1 flex min-h-11 items-center gap-1.5 text-sm font-semibold tabular-nums',
+              mainGrams > 0 ? 'text-orange-700' : 'text-stone-600',
+            )}
+          >
+            <Wand2 size={16} className="shrink-0" aria-hidden="true" />
+            自動補齊 {mainGrams} g
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={ICON_BUTTON}
+              onClick={() => onBump(food.id, -BUMP_STEP)}
+              aria-label={`${food.name} 減少 ${BUMP_STEP} 克`}
+              disabled={grams <= 0}
+            >
+              <Minus size={18} aria-hidden="true" />
+            </button>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={text}
+              placeholder="0"
+              onChange={handleChange}
+              onBlur={() => setText(gramsText(grams))}
+              aria-label={`${food.name} 每餐克數`}
+              className={cx(
+                'h-11 w-14 rounded-xl border border-stone-300 bg-white px-2 text-right text-stone-900 tabular-nums',
+                FOCUS_RING,
+              )}
+            />
+            <span className="text-sm text-stone-600" aria-hidden="true">
+              g
+            </span>
+            <button
+              type="button"
+              className={ICON_BUTTON}
+              onClick={() => onBump(food.id, BUMP_STEP)}
+              aria-label={`${food.name} 增加 ${BUMP_STEP} 克`}
+            >
+              <Plus size={18} aria-hidden="true" />
+            </button>
+          </>
+        )}
+      </div>
+      {capWarning && (
+        <p className="mt-1 pl-8 text-xs text-amber-700 tabular-nums">
+          {capWarning.label}每餐建議 ≤ {capWarning.cap} g,目前合計{' '}
+          {capWarning.grams} g
+        </p>
+      )}
     </li>
   );
 }

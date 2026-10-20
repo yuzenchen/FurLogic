@@ -41,3 +41,13 @@ export const MEALS_PER_DAY = DEFAULT_MEALS_PER_DAY; // 向下相容舊名稱
 
 // === 補充品 ===
 export const EGGSHELL_CA_MG_PER_GRAM = 350;
+
+// === 每餐上限(護腸配方;超過只警告不強制) ===
+export const FOOD_SUBTYPE = { ORGAN: 'organ', FATTY_FISH: 'fatty_fish' };
+export const MEAL_CAPS = {
+  veg: { grams: 50, label: '蔬菜' }, // food.type === 'veg'
+  organ: { grams: 12, label: '內臟' }, // food.subtype === 'organ'
+  fatty_fish: { grams: 65, label: '高脂魚' }, // food.subtype === 'fatty_fish'
+};
+// 主力瘦肉克數的取位方式:缺口 ÷ 係數後無條件進位到整數 g
+export const MAIN_MEAT_ROUNDING = 'ceil';

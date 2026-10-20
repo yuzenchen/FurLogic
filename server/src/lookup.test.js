@@ -30,6 +30,7 @@ const classification = (overrides = {}) => ({
   nameEn: 'salmon atlantic raw',
   type: 'protein',
   recipeRole: 'protein',
+  subtype: 'fatty_fish',
   safety: 'safe',
   warning: null,
   description: '富含 Omega-3 的魚肉。',
@@ -126,6 +127,7 @@ describe('POST /api/foods/lookup', () => {
         nameEn: 'salmon atlantic raw',
         type: 'protein',
         recipeRole: 'protein',
+        subtype: 'fatty_fish',
         safety: 'safe',
         warning: null,
         description: '富含 Omega-3 的魚肉。',
@@ -149,6 +151,10 @@ describe('POST /api/foods/lookup', () => {
       'application/json',
     );
     expect(geminiBody.generationConfig.responseSchema).toBeTruthy();
+    expect(geminiBody.generationConfig.responseSchema.required).toContain(
+      'subtype',
+    );
+    expect(geminiBody.contents[0].parts[0].text).toContain('subtype');
     expect(geminiInit.signal).toBeInstanceOf(AbortSignal);
 
     const [usdaUrl, usdaInit] = callsTo(fetchMock, 'api.nal.usda.gov')[0];
@@ -184,7 +190,13 @@ describe('POST /api/foods/lookup', () => {
       { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
       makeFetch({
         gemini: [
-          geminiReply(classification({ nameZh: '雞胸肉', nameEn: 'chicken' })),
+          geminiReply(
+            classification({
+              nameZh: '雞胸肉',
+              nameEn: 'chicken',
+              subtype: 'bogus', // 非法值 → null
+            }),
+          ),
         ],
         usda: [
           jsonResponse({ foods: [salmonFood, noEnergyFoundation, foundation] }),
@@ -194,6 +206,7 @@ describe('POST /api/foods/lookup', () => {
     const res = await lookup('雞胸肉');
     expect(res.status).toBe(200);
     expect(res.body.draft).toMatchObject({
+      subtype: null,
       calories: 121,
       protein: 22.6,
       fat: 2.6,
@@ -252,6 +265,7 @@ describe('POST /api/foods/lookup', () => {
       nameEn: 'Salmon Raw',
       type: 'veg',
       recipeRole: 'plant',
+      subtype: null,
       safety: 'caution',
       warning: '未經 AI 判定安全性,請自行確認',
       source: 'usda',

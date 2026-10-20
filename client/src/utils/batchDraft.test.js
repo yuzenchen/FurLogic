@@ -2,15 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   batchDraftReducer,
   emptyBatchDraft,
-  flattenDraftItems,
   snapshotFood,
-  toServings,
+  toMealTargetOverride,
+  toMealsCount,
+  toPlanItems,
 } from './batchDraft';
 
 const chicken = {
   id: 1,
   name: '雞胸肉',
   type: 'protein',
+  subtype: null,
   recipeRole: 'protein',
   safety: 'safe',
   warning: null,
@@ -23,6 +25,20 @@ const chicken = {
   source: 'builtin',
   sourceRef: null,
   isBuiltin: true,
+};
+const mackerel = {
+  id: 2,
+  name: '鯖魚',
+  type: 'protein',
+  subtype: 'fatty_fish',
+  recipeRole: 'protein',
+  safety: 'safe',
+  calories: 205,
+  protein: 19,
+  fat: 14,
+  ca: 12,
+  p: 217,
+  source: 'builtin',
 };
 const pumpkin = {
   id: 3,
@@ -37,6 +53,23 @@ const pumpkin = {
   p: 44,
   source: 'builtin',
 };
+const liver = {
+  id: 4,
+  name: '鴨內臟',
+  type: 'protein',
+  subtype: 'organ',
+  recipeRole: 'protein',
+  safety: 'safe',
+  calories: 150,
+};
+const rice = {
+  id: 5,
+  name: '白飯',
+  type: 'starch',
+  recipeRole: 'plant',
+  safety: 'safe',
+  calories: 130,
+};
 const grape = {
   id: 99,
   name: '葡萄',
@@ -48,13 +81,16 @@ const grape = {
 
 const empty = emptyBatchDraft();
 const run = (state, ...actions) => actions.reduce(batchDraftReducer, state);
+const add = (food) => ({ type: 'addFood', food });
+const rolesOf = (s) => s.items.map((i) => [i.food.id, i.role]);
 
 describe('snapshotFood', () => {
-  it('keeps only draft fields', () => {
+  it('keeps only draft fields (including subtype)', () => {
     expect(snapshotFood(chicken)).toEqual({
       id: 1,
       name: '雞胸肉',
       type: 'protein',
+      subtype: null,
       recipeRole: 'protein',
       safety: 'safe',
       warning: null,
@@ -68,135 +104,164 @@ describe('snapshotFood', () => {
   });
 });
 
-describe('toServings', () => {
-  it('normalises to an integer in 1..60 or null', () => {
-    expect(toServings(null)).toBeNull();
-    expect(toServings('')).toBeNull();
-    expect(toServings('abc')).toBeNull();
-    expect(toServings(0)).toBe(1);
-    expect(toServings(-4)).toBe(1);
-    expect(toServings(3.6)).toBe(4);
-    expect(toServings('7')).toBe(7);
-    expect(toServings(999)).toBe(60);
+describe('toMealsCount', () => {
+  it('normalises to an integer in 1..60', () => {
+    expect(toMealsCount(null)).toBe(1);
+    expect(toMealsCount('')).toBe(1);
+    expect(toMealsCount('abc')).toBe(1);
+    expect(toMealsCount(0)).toBe(1);
+    expect(toMealsCount(-4)).toBe(1);
+    expect(toMealsCount(3.6)).toBe(4);
+    expect(toMealsCount('7')).toBe(7);
+    expect(toMealsCount(999)).toBe(60);
+  });
+});
+
+describe('toMealTargetOverride', () => {
+  it('keeps positive numbers to one decimal, otherwise null', () => {
+    expect(toMealTargetOverride(null)).toBeNull();
+    expect(toMealTargetOverride('')).toBeNull();
+    expect(toMealTargetOverride('abc')).toBeNull();
+    expect(toMealTargetOverride(0)).toBeNull();
+    expect(toMealTargetOverride(-10)).toBeNull();
+    expect(toMealTargetOverride(Infinity)).toBeNull();
+    expect(toMealTargetOverride('450')).toBe(450);
+    expect(toMealTargetOverride(450.26)).toBe(450.3);
   });
 });
 
 describe('batchDraftReducer', () => {
-  it('starts with no servings override and no items', () => {
-    expect(empty).toEqual({ servings: null, vegWeightPct: 20, items: [] });
+  it('starts with 2 meals, no override and no items', () => {
+    expect(empty).toEqual({
+      mealsCount: 2,
+      mealTargetOverride: null,
+      items: [],
+    });
   });
 
-  it('setServings stores an integer or null (use suggestion)', () => {
-    const s = run(empty, { type: 'setServings', servings: 4 });
-    expect(s.servings).toBe(4);
-    expect(run(s, { type: 'setServings', servings: null }).servings).toBeNull();
-    expect(run(s, { type: 'setServings', servings: 0 }).servings).toBe(1);
-    expect(batchDraftReducer(s, { type: 'setServings', servings: 4 })).toBe(s);
-  });
-
-  it('adds foods with 0 g and skips duplicates and toxic foods', () => {
-    const s = run(
-      empty,
-      { type: 'addFood', food: chicken },
-      { type: 'addFood', food: chicken },
-      { type: 'addFood', food: grape },
+  it('setMealsCount clamps to 1–60 and keeps identity when unchanged', () => {
+    const s = run(empty, { type: 'setMealsCount', mealsCount: 4 });
+    expect(s.mealsCount).toBe(4);
+    expect(run(s, { type: 'setMealsCount', mealsCount: 0 }).mealsCount).toBe(1);
+    expect(run(s, { type: 'setMealsCount', mealsCount: 100 }).mealsCount).toBe(
+      60,
     );
+    expect(batchDraftReducer(s, { type: 'setMealsCount', mealsCount: 4 })).toBe(
+      s,
+    );
+  });
+
+  it('setMealTargetOverride stores a positive kcal or null', () => {
+    const s = run(empty, { type: 'setMealTargetOverride', mealTarget: 450 });
+    expect(s.mealTargetOverride).toBe(450);
+    expect(
+      run(s, { type: 'setMealTargetOverride', mealTarget: null })
+        .mealTargetOverride,
+    ).toBeNull();
+    expect(
+      run(s, { type: 'setMealTargetOverride', mealTarget: -1 })
+        .mealTargetOverride,
+    ).toBeNull();
+    expect(
+      batchDraftReducer(s, { type: 'setMealTargetOverride', mealTarget: 450 }),
+    ).toBe(s);
+  });
+
+  it('addFood skips duplicates and toxic foods', () => {
+    const s = run(empty, add(chicken), add(chicken), add(grape));
     expect(s.items).toHaveLength(1);
-    expect(s.items[0].grams).toBe(0);
     expect(s.items[0].food).toEqual(snapshotFood(chicken));
   });
 
+  it('addFood defaults roles: first protein → main, later proteins → variant, others → fixed', () => {
+    const s = run(empty, add(rice), add(chicken), add(mackerel), add(pumpkin));
+    expect(rolesOf(s)).toEqual([
+      [5, 'fixed'],
+      [1, 'main'],
+      [2, 'variant'],
+      [3, 'fixed'],
+    ]);
+  });
+
+  it('addFood defaults gramsPerMeal from the meal caps (veg 50 / organ 12 / fatty fish 65 / else 0)', () => {
+    const s = run(empty, add(pumpkin), add(liver), add(mackerel), add(rice));
+    expect(s.items.map((i) => i.gramsPerMeal)).toEqual([50, 12, 65, 0]);
+  });
+
   it('removes a food by id', () => {
-    const s = run(
-      empty,
-      { type: 'addFood', food: chicken },
-      { type: 'addFood', food: pumpkin },
-      { type: 'removeFood', id: 1 },
-    );
+    const s = run(empty, add(chicken), add(pumpkin), {
+      type: 'removeFood',
+      id: 1,
+    });
     expect(s.items.map((i) => i.food.id)).toEqual([3]);
   });
 
-  it('setGrams clamps to ≥ 0 and turns NaN into 0', () => {
-    const base = run(empty, { type: 'addFood', food: chicken });
+  it('setRole changes a role and demotes the previous main to variant', () => {
+    const base = run(empty, add(chicken), add(mackerel));
+    expect(rolesOf(base)).toEqual([
+      [1, 'main'],
+      [2, 'variant'],
+    ]);
+    const s = run(base, { type: 'setRole', id: 2, role: 'main' });
+    expect(rolesOf(s)).toEqual([
+      [1, 'variant'],
+      [2, 'main'],
+    ]);
+    const t = run(s, { type: 'setRole', id: 2, role: 'fixed' });
+    expect(rolesOf(t)).toEqual([
+      [1, 'variant'],
+      [2, 'fixed'],
+    ]);
+  });
+
+  it('setRole ignores unknown roles, unknown ids and no-op changes', () => {
+    const base = run(empty, add(chicken));
+    expect(batchDraftReducer(base, { type: 'setRole', id: 1, role: 'x' })).toBe(
+      base,
+    );
+    expect(
+      batchDraftReducer(base, { type: 'setRole', id: 42, role: 'fixed' }),
+    ).toBe(base);
+    expect(
+      batchDraftReducer(base, { type: 'setRole', id: 1, role: 'main' }),
+    ).toBe(base);
+  });
+
+  it('setGramsPerMeal clamps to ≥ 0, one decimal, and turns NaN into 0', () => {
+    const base = run(empty, add(chicken));
     const grams = (g) =>
-      run(base, { type: 'setGrams', id: 1, grams: g }).items[0].grams;
-    expect(grams(1000)).toBe(1000);
+      run(base, { type: 'setGramsPerMeal', id: 1, grams: g }).items[0]
+        .gramsPerMeal;
+    expect(grams(100)).toBe(100);
     expect(grams(-5)).toBe(0);
     expect(grams(NaN)).toBe(0);
     expect(grams('')).toBe(0);
-    expect(grams('12.5')).toBe(12.5);
+    expect(grams('12.56')).toBe(12.6);
   });
 
-  it('bump steps by 50 with a floor of 0', () => {
-    const base = run(
-      empty,
-      { type: 'addFood', food: chicken },
-      { type: 'setGrams', id: 1, grams: 30 },
-    );
-    expect(run(base, { type: 'bump', id: 1, delta: 1 }).items[0].grams).toBe(
-      80,
-    );
-    expect(run(base, { type: 'bump', id: 1, delta: -1 }).items[0].grams).toBe(
-      0,
-    );
+  it('bump steps by 10 with a floor of 0', () => {
+    const base = run(empty, add(chicken), {
+      type: 'setGramsPerMeal',
+      id: 1,
+      grams: 5,
+    });
+    expect(
+      run(base, { type: 'bump', id: 1, delta: 1 }).items[0].gramsPerMeal,
+    ).toBe(15);
+    expect(
+      run(base, { type: 'bump', id: 1, delta: -1 }).items[0].gramsPerMeal,
+    ).toBe(0);
   });
 
-  it('applyAllocation scales meat to the target and sizes veg by weight %', () => {
+  it('clear empties items and override but keeps mealsCount', () => {
     const s = run(
       empty,
-      { type: 'addFood', food: chicken },
-      { type: 'addFood', food: pumpkin },
-      { type: 'setGrams', id: 1, grams: 1000 },
-      { type: 'setGrams', id: 3, grams: 500 },
-      { type: 'applyAllocation', servings: 4, mealTarget: 361 },
-    );
-    // 雞胸 1000 g → 1444 kcal 需 1375 g;南瓜占整鍋 20% → 344 g
-    expect(s.items.map((i) => i.grams)).toEqual([1375, 344]);
-  });
-
-  it('applyAllocation uses the draft vegWeightPct', () => {
-    const s = run(
-      empty,
-      { type: 'addFood', food: chicken },
-      { type: 'addFood', food: pumpkin },
-      { type: 'setVegWeightPct', pct: 50 },
-      { type: 'applyAllocation', servings: 1, mealTarget: 361 },
-    );
-    expect(s.items[0].grams).toBe(344);
-    expect(s.items[1].grams).toBe(344);
-  });
-
-  it('setVegWeightPct clamps to 0–90', () => {
-    expect(run(empty, { type: 'setVegWeightPct', pct: 120 }).vegWeightPct).toBe(
-      90,
-    );
-    expect(run(empty, { type: 'setVegWeightPct', pct: -1 }).vegWeightPct).toBe(
-      0,
-    );
-    expect(batchDraftReducer(empty, { type: 'setVegWeightPct', pct: 20 })).toBe(
-      empty,
-    );
-  });
-
-  it('applyAllocation treats a missing servings count as 1', () => {
-    const s = run(
-      empty,
-      { type: 'addFood', food: chicken },
-      { type: 'applyAllocation', servings: null, mealTarget: 361 },
-    );
-    // 只有肉、且為 0 g → 肉負責 100% 熱量
-    expect(s.items[0].grams).toBe(Math.round((361 / 105) * 100));
-  });
-
-  it('clear resets items and servings but keeps vegWeightPct', () => {
-    const s = run(
-      empty,
-      { type: 'addFood', food: chicken },
-      { type: 'setServings', servings: 5 },
-      { type: 'setVegWeightPct', pct: 30 },
+      add(chicken),
+      { type: 'setMealsCount', mealsCount: 5 },
+      { type: 'setMealTargetOverride', mealTarget: 400 },
       { type: 'clear' },
     );
-    expect(s).toEqual({ servings: null, vegWeightPct: 30, items: [] });
+    expect(s).toEqual({ mealsCount: 5, mealTargetOverride: null, items: [] });
   });
 
   it('returns the same state for unknown actions', () => {
@@ -204,17 +269,19 @@ describe('batchDraftReducer', () => {
   });
 });
 
-describe('flattenDraftItems', () => {
-  it('merges food fields with grams', () => {
-    const s = run(
-      empty,
-      { type: 'addFood', food: chicken },
-      { type: 'setGrams', id: 1, grams: 1000 },
-    );
-    expect(flattenDraftItems(s.items)[0]).toMatchObject({
-      name: '雞胸肉',
-      calories: 105,
-      grams: 1000,
+describe('toPlanItems', () => {
+  it('merges food fields with role and gramsPerMeal', () => {
+    const s = run(empty, add(mackerel), {
+      type: 'setGramsPerMeal',
+      id: 2,
+      grams: 40,
+    });
+    expect(toPlanItems(s.items)[0]).toMatchObject({
+      name: '鯖魚',
+      subtype: 'fatty_fish',
+      calories: 205,
+      role: 'main',
+      gramsPerMeal: 40,
     });
   });
 });

@@ -8,6 +8,9 @@
  * - recipeRole  配餐角色  'protein' | 'plant' | 'excluded'
  *               解耦「使用者看到的分類」與「演算法分配熱量的角色」
  * - safety      'safe' | 'caution' | 'toxic'
+ * - subtype     'organ' | 'fatty_fish' | null(可省略 = null)
+ *               計算器用來判斷每餐上限:內臟(肝、心、腎等)→ organ;
+ *               高脂魚(鮭魚、鯖魚、秋刀魚、沙丁魚等)→ fatty_fish
  * - calories/protein/fat/ca/p — 每 100g 的營養素
  *   (kcal / g / g / mg / mg)
  *
@@ -19,6 +22,9 @@
  * (巧克力、葡萄/葡萄乾、洋蔥、大蒜、夏威夷豆、酪梨種子等)
  * 一律 safety: 'toxic' + recipeRole: 'excluded'。
  */
+
+/** subtype 可用值(null 表示無特殊子類) */
+export const FOOD_SUBTYPES = ['organ', 'fatty_fish'];
 
 export const FOOD_DATABASE = [
   // === 蛋白質:肉類 ===
@@ -106,6 +112,34 @@ export const FOOD_DATABASE = [
     desc: '去皮使用,風味重。',
     warning: null,
   },
+  {
+    id: 44,
+    name: '豬小里肌',
+    type: 'protein',
+    recipeRole: 'protein',
+    safety: 'safe',
+    calories: 110,
+    protein: 21,
+    fat: 2.2,
+    ca: 5,
+    p: 243,
+    desc: '豬肉最瘦的部位,低脂高蛋白。',
+    warning: null,
+  },
+  {
+    id: 45,
+    name: '鴨柳條',
+    type: 'protein',
+    recipeRole: 'protein',
+    safety: 'safe',
+    calories: 110,
+    protein: 20,
+    fat: 3,
+    ca: 3,
+    p: 190,
+    desc: '去皮鴨胸切條,低脂且適口性佳。',
+    warning: null,
+  },
 
   // === 蛋白質:內臟 ===
   {
@@ -113,6 +147,7 @@ export const FOOD_DATABASE = [
     name: '雞肝',
     type: 'protein',
     recipeRole: 'protein',
+    subtype: 'organ',
     safety: 'caution',
     calories: 119,
     protein: 19,
@@ -127,6 +162,7 @@ export const FOOD_DATABASE = [
     name: '豬肝',
     type: 'protein',
     recipeRole: 'protein',
+    subtype: 'organ',
     safety: 'caution',
     calories: 121,
     protein: 21,
@@ -136,6 +172,21 @@ export const FOOD_DATABASE = [
     desc: '鐵與葉酸豐富。',
     warning: '建議不超過總食量 5%',
   },
+  {
+    id: 43,
+    name: '鴨內臟(綜合)',
+    type: 'protein',
+    recipeRole: 'protein',
+    subtype: 'organ',
+    safety: 'safe',
+    calories: 150,
+    protein: 18,
+    fat: 7,
+    ca: 10,
+    p: 240,
+    desc: '鴨肝、鴨心、鴨胗混合,鐵與維生素 A 豐富。',
+    warning: '內臟維生素 A 高,每餐建議 ≤ 12 g',
+  },
 
   // === 蛋白質:海鮮 ===
   {
@@ -143,6 +194,7 @@ export const FOOD_DATABASE = [
     name: '鮭魚',
     type: 'protein',
     recipeRole: 'protein',
+    subtype: 'fatty_fish',
     safety: 'safe',
     calories: 208,
     protein: 20,
@@ -157,6 +209,7 @@ export const FOOD_DATABASE = [
     name: '鯖魚',
     type: 'protein',
     recipeRole: 'protein',
+    subtype: 'fatty_fish',
     safety: 'safe',
     calories: 205,
     protein: 19,
@@ -352,6 +405,48 @@ export const FOOD_DATABASE = [
     desc: '只取熟紅番茄果肉,去蒂去莖。',
     warning: '青番茄、莖葉含茄鹼,絕對不可餵',
   },
+  {
+    id: 40,
+    name: '冬瓜',
+    type: 'veg',
+    recipeRole: 'plant',
+    safety: 'safe',
+    calories: 14,
+    protein: 0.4,
+    fat: 0.2,
+    ca: 19,
+    p: 19,
+    desc: '高水分低熱量,利尿消暑,去皮去籽煮軟。',
+    warning: null,
+  },
+  {
+    id: 41,
+    name: '大黃瓜',
+    type: 'veg',
+    recipeRole: 'plant',
+    safety: 'safe',
+    calories: 14,
+    protein: 0.6,
+    fat: 0.1,
+    ca: 19,
+    p: 22,
+    desc: '清爽多汁的低卡蔬菜,去皮去籽後煮熟。',
+    warning: null,
+  },
+  {
+    id: 42,
+    name: '西洋芹',
+    type: 'veg',
+    recipeRole: 'plant',
+    safety: 'safe',
+    calories: 14,
+    protein: 0.7,
+    fat: 0.2,
+    ca: 40,
+    p: 24,
+    desc: '高纖低卡,切碎煮軟避免纖維太粗。',
+    warning: null,
+  },
 
   // === 水果 ===
   {
@@ -466,6 +561,34 @@ export const FOOD_DATABASE = [
     ca: 9,
     p: 77,
     desc: '低 GI 碳水,適合長毛犬皮毛。',
+    warning: null,
+  },
+  {
+    id: 38,
+    name: '白飯(熟)',
+    type: 'starch',
+    recipeRole: 'plant',
+    safety: 'safe',
+    calories: 130,
+    protein: 2.7,
+    fat: 0.3,
+    ca: 10,
+    p: 43,
+    desc: '好消化的基本碳水,腸胃不適時的溫和主食。',
+    warning: null,
+  },
+  {
+    id: 39,
+    name: '薏仁泥(熟)',
+    type: 'starch',
+    recipeRole: 'plant',
+    safety: 'safe',
+    calories: 117,
+    protein: 4.3,
+    fat: 1.8,
+    ca: 6,
+    p: 70,
+    desc: '煮軟打成泥,蛋白質比白飯高,利水消腫。',
     warning: null,
   },
 

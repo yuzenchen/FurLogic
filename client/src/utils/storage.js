@@ -2,7 +2,7 @@
  * localStorage 小工具。所有存取都包 try/catch(無痕模式 / 停用儲存時不會壞掉)。
  * 毛孩資料、食材都存在 API,這裡只放 UI 偏好、批次草稿與舊版資料遷移。
  */
-import { toVegWeightPct } from '@furlogic/shared';
+import { ITEM_ROLES } from '@furlogic/shared';
 
 const KEYS = {
   ACTIVE_TAB: 'furlogic_active_tab',
@@ -93,29 +93,35 @@ const isValidDraftItem = (item) =>
   isPlainObject(item) &&
   isPlainObject(item.food) &&
   typeof item.food.name === 'string' &&
-  Number.isFinite(item.grams);
+  ITEM_ROLES.includes(item.role) &&
+  Number.isFinite(item.gramsPerMeal) &&
+  item.gramsPerMeal >= 0;
 
-const isValidServings = (n) => n === null || (Number.isInteger(n) && n >= 1);
+const isValidMealsCount = (n) => Number.isInteger(n) && n >= 1 && n <= 60;
+
+const isValidTargetOverride = (v) =>
+  v === null || (Number.isFinite(v) && v > 0);
 
 /**
  * 讀批次草稿;順便清掉已停用的單餐草稿 key。格式不符回 null。
- * vegWeightPct 缺漏或不合法時補預設值(舊草稿相容)。
- * @returns {{ servings: number|null, vegWeightPct: number, items: Array<{ food: object, grams: number }> } | null}
+ * 舊形狀(servings / grams / vegWeightPct)不遷移,直接視為無效。
+ * @returns {{ mealsCount: number, mealTargetOverride: number|null, items: Array<{ food: object, role: string, gramsPerMeal: number }> } | null}
  */
 export const getBatchDraft = () => {
   removeRaw(KEYS.LEGACY_SINGLE_DRAFT);
   const draft = readJson(KEYS.BATCH_DRAFT);
   if (
     !isPlainObject(draft) ||
-    !isValidServings(draft.servings ?? null) ||
+    !isValidMealsCount(draft.mealsCount) ||
+    !isValidTargetOverride(draft.mealTargetOverride ?? null) ||
     !Array.isArray(draft.items) ||
     !draft.items.every(isValidDraftItem)
   ) {
     return null;
   }
   return {
-    servings: draft.servings ?? null,
-    vegWeightPct: toVegWeightPct(draft.vegWeightPct),
+    mealsCount: draft.mealsCount,
+    mealTargetOverride: draft.mealTargetOverride ?? null,
     items: draft.items,
   };
 };

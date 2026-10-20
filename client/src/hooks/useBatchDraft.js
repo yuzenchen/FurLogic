@@ -23,14 +23,16 @@ export default function useBatchDraft() {
 
   const actions = useMemo(
     () => ({
-      setServings: (servings) => dispatch({ type: 'setServings', servings }),
+      setMealsCount: (mealsCount) =>
+        dispatch({ type: 'setMealsCount', mealsCount }),
+      setMealTargetOverride: (mealTarget) =>
+        dispatch({ type: 'setMealTargetOverride', mealTarget }),
       addFood: (food) => dispatch({ type: 'addFood', food }),
       removeFood: (id) => dispatch({ type: 'removeFood', id }),
-      setGrams: (id, grams) => dispatch({ type: 'setGrams', id, grams }),
+      setRole: (id, role) => dispatch({ type: 'setRole', id, role }),
+      setGramsPerMeal: (id, grams) =>
+        dispatch({ type: 'setGramsPerMeal', id, grams }),
       bump: (id, delta) => dispatch({ type: 'bump', id, delta }),
-      setVegWeightPct: (pct) => dispatch({ type: 'setVegWeightPct', pct }),
-      applyAllocation: (servings, mealTarget) =>
-        dispatch({ type: 'applyAllocation', servings, mealTarget }),
       clear: () => dispatch({ type: 'clear' }),
     }),
     [dispatch],

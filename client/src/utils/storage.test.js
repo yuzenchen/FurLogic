@@ -62,26 +62,52 @@ describe('active tab', () => {
 describe('batch draft', () => {
   it('validates shape on read', () => {
     const draft = {
-      servings: 4,
-      vegWeightPct: 25,
-      items: [{ food: { id: 1, name: '雞胸' }, grams: 1000 }],
+      mealsCount: 4,
+      mealTargetOverride: 450,
+      items: [
+        { food: { id: 1, name: '雞胸' }, role: 'main', gramsPerMeal: 0 },
+        { food: { id: 3, name: '南瓜' }, role: 'fixed', gramsPerMeal: 50 },
+      ],
     };
     saveBatchDraft(draft);
     expect(getBatchDraft()).toEqual(draft);
-    saveBatchDraft({ ...draft, servings: null });
-    expect(getBatchDraft().servings).toBeNull();
-    storage.setItem('furlogic_batch_draft', '{"items":[]}');
-    // 舊草稿沒有 vegWeightPct → 補預設 20
+    saveBatchDraft({ ...draft, mealTargetOverride: null });
+    expect(getBatchDraft().mealTargetOverride).toBeNull();
+    // 缺 mealTargetOverride 視為 null
+    storage.setItem('furlogic_batch_draft', '{"mealsCount":2,"items":[]}');
     expect(getBatchDraft()).toEqual({
-      servings: null,
-      vegWeightPct: 20,
+      mealsCount: 2,
+      mealTargetOverride: null,
       items: [],
     });
-    storage.setItem('furlogic_batch_draft', '{"servings":0,"items":[]}');
-    expect(getBatchDraft()).toBeNull();
-    storage.setItem('furlogic_batch_draft', '{"servings":2,"items":[{}]}');
-    expect(getBatchDraft()).toBeNull();
-    storage.setItem('furlogic_batch_draft', 'not json');
+    const bad = [
+      '{"items":[]}', // 缺 mealsCount
+      '{"mealsCount":0,"items":[]}',
+      '{"mealsCount":61,"items":[]}',
+      '{"mealsCount":2.5,"items":[]}',
+      '{"mealsCount":2,"mealTargetOverride":0,"items":[]}',
+      '{"mealsCount":2,"mealTargetOverride":"450","items":[]}',
+      '{"mealsCount":2,"items":[{}]}',
+      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"x","gramsPerMeal":1}]}',
+      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed","gramsPerMeal":-1}]}',
+      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed"}]}',
+      'not json',
+    ];
+    for (const raw of bad) {
+      storage.setItem('furlogic_batch_draft', raw);
+      expect(getBatchDraft(), raw).toBeNull();
+    }
+  });
+
+  it('treats the old servings/grams shape as invalid (no migration)', () => {
+    storage.setItem(
+      'furlogic_batch_draft',
+      JSON.stringify({
+        servings: 4,
+        vegWeightPct: 25,
+        items: [{ food: { id: 1, name: '雞胸' }, grams: 1000 }],
+      }),
+    );
     expect(getBatchDraft()).toBeNull();
   });
 

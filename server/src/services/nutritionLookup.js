@@ -12,11 +12,13 @@ const TIMEOUT_MS = 10_000;
 const FOOD_TYPES = ['protein', 'veg', 'fruit', 'starch', 'snack'];
 const RECIPE_ROLES = ['protein', 'plant', 'excluded'];
 const SAFETY = ['safe', 'caution', 'toxic'];
+const FOOD_SUBTYPES = ['organ', 'fatty_fish'];
 
 const DEFAULT_CLASSIFICATION = {
   nameZh: null,
   type: 'veg',
   recipeRole: 'plant',
+  subtype: null,
   safety: 'caution',
   warning: '未經 AI 判定安全性,請自行確認',
   description: null,
@@ -29,6 +31,7 @@ const CLASSIFY_SCHEMA = {
     nameEn: { type: 'STRING' },
     type: { type: 'STRING', enum: FOOD_TYPES },
     recipeRole: { type: 'STRING', enum: RECIPE_ROLES },
+    subtype: { type: 'STRING', enum: FOOD_SUBTYPES, nullable: true },
     safety: { type: 'STRING', enum: SAFETY },
     warning: { type: 'STRING', nullable: true },
     description: { type: 'STRING' },
@@ -38,6 +41,7 @@ const CLASSIFY_SCHEMA = {
     'nameEn',
     'type',
     'recipeRole',
+    'subtype',
     'safety',
     'warning',
     'description',
@@ -207,6 +211,7 @@ export function createNutritionLookup({
 - nameEn:用於 USDA FoodData Central 搜尋的英文詞(生的、未調味,例如 "chicken breast raw")。
 - type:protein|veg|fruit|starch|snack 之一。
 - recipeRole:protein(肉/蛋/魚等蛋白質主食)、plant(蔬果澱粉)、excluded(不適合入菜)。
+- subtype:內臟類(肝、心、腎、胗、綜合內臟)→ organ;高脂魚類(鮭魚、鯖魚、秋刀魚、沙丁魚)→ fatty_fish;其餘 null。
 - safety:對狗狗的安全性 safe|caution|toxic。
 - warning:繁體中文注意事項,沒有就 null。
 - description:繁體中文一句話簡介。
@@ -222,6 +227,7 @@ export function createNutritionLookup({
         safety === 'toxic'
           ? 'excluded'
           : pickEnum(raw.recipeRole, RECIPE_ROLES, 'plant'),
+      subtype: pickEnum(raw.subtype, FOOD_SUBTYPES, null),
       safety,
       warning: cleanString(raw.warning),
       description: cleanString(raw.description),
@@ -314,6 +320,7 @@ calories(kcal)、protein(g)、fat(g)、ca(鈣 mg)、p(磷 mg),皆為 ≥ 0 的�
         nameEn: info.nameEn,
         type: info.type,
         recipeRole: info.recipeRole,
+        subtype: info.subtype ?? null,
         safety: info.safety,
         warning: info.warning,
         description: info.description,

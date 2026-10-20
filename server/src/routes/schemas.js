@@ -24,3 +24,11 @@ export const nullableString = (maxLength) => ({
   type: ['string', 'null'],
   maxLength,
 });
+
+/** 食材子類(與 shared FOOD_SUBTYPES 一致);null = 無特殊子類。 */
+export const FOOD_SUBTYPES = ['organ', 'fatty_fish'];
+
+export const nullableSubtype = {
+  type: ['string', 'null'],
+  enum: [...FOOD_SUBTYPES, null],
+};

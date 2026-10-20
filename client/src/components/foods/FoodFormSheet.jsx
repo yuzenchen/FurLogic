@@ -10,6 +10,12 @@ const ROLE_OPTIONS = [
   { value: 'protein', label: '蛋白質' },
   { value: 'plant', label: '蔬果主食' },
 ];
+/** 子類:每餐上限用(內臟 ≤ 12 g、高脂魚 ≤ 65 g);表單用空字串代表 null */
+const SUBTYPE_OPTIONS = [
+  { value: '', label: '無' },
+  { value: 'organ', label: '內臟' },
+  { value: 'fatty_fish', label: '高脂魚' },
+];
 const SAFETY_OPTIONS = [
   { value: 'safe', label: '安全' },
   { value: 'caution', label: '注意' },
@@ -43,6 +49,10 @@ const toFormValues = (food = {}) => ({
   nameEn: food.nameEn ?? '',
   type: FOOD_TYPES[food.type] ? food.type : 'protein',
   recipeRole: roleFor(food),
+  subtype:
+    food.subtype === 'organ' || food.subtype === 'fatty_fish'
+      ? food.subtype
+      : '',
   safety: ['safe', 'caution', 'toxic'].includes(food.safety)
     ? food.safety
     : 'safe',
@@ -83,6 +93,7 @@ const toFields = (v) => {
     nameEn: v.nameEn.trim() || null,
     type: v.type,
     recipeRole: v.safety === 'toxic' ? 'excluded' : v.recipeRole,
+    subtype: v.subtype || null,
     safety: v.safety,
     warning: v.warning.trim() || null,
   };
@@ -99,6 +110,8 @@ const buildCreatePayload = (v, mode, initial) => {
   Object.entries(fields).forEach(([k, val]) => {
     if (val !== null) payload[k] = val;
   });
+  // 子類「無」也要明確送 null,避免 lookup 草稿帶入的值殘留
+  payload.subtype = fields.subtype;
   const fromLookup =
     mode === 'lookup' &&
     (initial?.source === 'usda' || initial?.source === 'ai');
@@ -330,6 +343,21 @@ export default function FoodFormSheet({
             options={ROLE_OPTIONS}
             onChange={set('recipeRole')}
           />
+        </Field>
+
+        <Field label="子類" htmlFor={`${formId}-subtype`}>
+          <select
+            id={`${formId}-subtype`}
+            className={INPUT_CLASS}
+            value={values.subtype}
+            onChange={onInput('subtype')}
+          >
+            {SUBTYPE_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field label="安全性" labelId={`${formId}-safety`}>
