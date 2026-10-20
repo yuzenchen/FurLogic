@@ -29,7 +29,7 @@ export default function Segmented({
             aria-checked={selected}
             onClick={() => onChange(opt.value)}
             className={cx(
-              'h-11 flex-1 min-w-0 rounded-xl px-2 text-sm font-semibold transition-colors',
+              'h-11 flex-1 min-w-0 whitespace-nowrap rounded-xl px-3 text-sm font-semibold transition-colors',
               selected
                 ? 'bg-orange-700 text-white'
                 : 'bg-white border border-stone-300 text-stone-800 hover:bg-stone-50',

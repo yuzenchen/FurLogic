@@ -64,6 +64,7 @@ describe('batch draft', () => {
     const draft = {
       mealsCount: 4,
       mealTargetOverride: 450,
+      inputMode: 'perMeal',
       items: [
         { food: { id: 1, name: '雞胸' }, role: 'main', batchGrams: 0 },
         { food: { id: 3, name: '南瓜' }, role: 'fixed', batchGrams: 200 },
@@ -73,13 +74,20 @@ describe('batch draft', () => {
     expect(getBatchDraft()).toEqual(draft);
     saveBatchDraft({ ...draft, mealTargetOverride: null });
     expect(getBatchDraft().mealTargetOverride).toBeNull();
-    // 缺 mealTargetOverride 視為 null
+    // 缺 mealTargetOverride 視為 null;缺 inputMode 視為 batch
     storage.setItem('furlogic_batch_draft', '{"mealsCount":2,"items":[]}');
     expect(getBatchDraft()).toEqual({
       mealsCount: 2,
       mealTargetOverride: null,
+      inputMode: 'batch',
       items: [],
     });
+    // 非法 inputMode → batch(不視為整份無效)
+    storage.setItem(
+      'furlogic_batch_draft',
+      '{"mealsCount":2,"inputMode":"weird","items":[]}',
+    );
+    expect(getBatchDraft().inputMode).toBe('batch');
     const bad = [
       '{"items":[]}', // 缺 mealsCount
       '{"mealsCount":0,"items":[]}',
@@ -122,6 +130,7 @@ describe('batch draft', () => {
     expect(getBatchDraft()).toEqual({
       mealsCount: 4,
       mealTargetOverride: null,
+      inputMode: 'batch',
       items: [
         { food: { id: 1, name: '雞胸' }, role: 'main', batchGrams: 0 },
         { food: { id: 3, name: '南瓜' }, role: 'fixed', batchGrams: 49.2 },

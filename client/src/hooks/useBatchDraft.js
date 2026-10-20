@@ -25,6 +25,7 @@ export default function useBatchDraft() {
     () => ({
       setMealsCount: (mealsCount) =>
         dispatch({ type: 'setMealsCount', mealsCount }),
+      setInputMode: (mode) => dispatch({ type: 'setInputMode', mode }),
       setMealTargetOverride: (mealTarget) =>
         dispatch({ type: 'setMealTargetOverride', mealTarget }),
       addFood: (food) => dispatch({ type: 'addFood', food }),
@@ -32,6 +33,8 @@ export default function useBatchDraft() {
       setRole: (id, role) => dispatch({ type: 'setRole', id, role }),
       setBatchGrams: (id, grams) =>
         dispatch({ type: 'setBatchGrams', id, grams }),
+      setGramsPerMeal: (id, grams) =>
+        dispatch({ type: 'setGramsPerMeal', id, grams }),
       bump: (id, delta) => dispatch({ type: 'bump', id, delta }),
       clear: () => dispatch({ type: 'clear' }),
     }),

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { FOCUS_RING, cx } from '../ui';
 import { ITEM_ROLES, ITEM_ROLE_LABELS, isVegetable } from '@furlogic/shared';
-import { BUMP_STEP } from '../../utils/batchDraft';
+import { BUMP_STEP_BATCH, BUMP_STEP_PER_MEAL } from '../../utils/batchDraft';
 
 const ICON_BUTTON = cx(
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-700 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed',
@@ -19,6 +19,7 @@ const ICON_BUTTON = cx(
 );
 
 const gramsText = (grams) => (grams > 0 ? String(grams) : '');
+const round1 = (n) => Math.round(n * 10) / 10;
 
 /** 角色圖示:主力 Drumstick(橘)、替換 Beef / Fish(高脂魚)、固定 Leaf;蔬菜一律 Leaf */
 const roleIcon = (food, role) => {
@@ -35,10 +36,13 @@ const roleIcon = (food, role) => {
 
 /**
  * 食材的一列:角色圖示、名稱、kcal/100g、警語、本餐 kcal;
- * 角色選單 + 採買總量控制(整批克數,右側顯示換算後的每餐克數);
- * 主力不輸入,顯示自動補齊的每餐克數與要買的總量。
+ * 角色選單 + 克數控制:inputMode 'batch' 輸入採買總量(±50,右側顯示每餐克數);
+ * 'perMeal' 輸入每餐克數(= batchGrams ÷ mealsCount,±10,右側顯示共買總量);
+ * 主力不輸入,兩種模式都顯示自動補齊的每餐克數與要買的總量。
  * 輸入框保留使用者正在打的字串(例如「12.」),只在外部改變克數時同步。
  * @param {object} item 草稿項目 { food, role, batchGrams }
+ * @param {'batch'|'perMeal'} inputMode 輸入模式
+ * @param {number} mealsCount 餐數(perMeal 模式換算用)
  * @param {object} [planItem] planGapFill 回傳的同一項(含反推後的 gramsPerMeal、batchGrams、kcalPerMeal)
  * @param {object} [capWarning] 該列所屬類別的每餐上限警告 { grams, cap, label }
  */
@@ -46,14 +50,23 @@ export default function BatchItemRow({
   item,
   planItem,
   capWarning,
+  inputMode = 'batch',
+  mealsCount = 1,
   onSetRole,
   onSetBatchGrams,
+  onSetGramsPerMeal,
   onBump,
   onRemove,
 }) {
   const { food, role } = item;
   const isMain = role === 'main';
-  const grams = item.batchGrams;
+  const isPerMeal = inputMode === 'perMeal';
+  const batchGrams = item.batchGrams;
+  // 輸入框顯示的值:batch 模式為採買總量;perMeal 模式為換算後的每餐克數
+  const grams = isPerMeal
+    ? round1(batchGrams / Math.max(1, mealsCount))
+    : batchGrams;
+  const step = isPerMeal ? BUMP_STEP_PER_MEAL : BUMP_STEP_BATCH;
   const [text, setText] = useState(() => gramsText(grams));
 
   useEffect(() => {
@@ -75,7 +88,9 @@ export default function BatchItemRow({
   const handleChange = (e) => {
     const value = e.target.value.replace(',', '.');
     setText(value);
-    onSetBatchGrams(food.id, value.trim() === '' ? 0 : Number(value));
+    const n = value.trim() === '' ? 0 : Number(value);
+    if (isPerMeal) onSetGramsPerMeal(food.id, n);
+    else onSetBatchGrams(food.id, n);
   };
 
   return (
@@ -149,8 +164,8 @@ export default function BatchItemRow({
             <button
               type="button"
               className={ICON_BUTTON}
-              onClick={() => onBump(food.id, -BUMP_STEP)}
-              aria-label={`${food.name} 減少 ${BUMP_STEP} 克`}
+              onClick={() => onBump(food.id, -1)}
+              aria-label={`${food.name} 減少 ${step} 克`}
               disabled={grams <= 0}
             >
               <Minus size={18} aria-hidden="true" />
@@ -162,7 +177,7 @@ export default function BatchItemRow({
               placeholder="0"
               onChange={handleChange}
               onBlur={() => setText(gramsText(grams))}
-              aria-label={`${food.name} 採買總量`}
+              aria-label={`${food.name} ${isPerMeal ? '每餐克數' : '採買總量'}`}
               className={cx(
                 'h-11 w-16 rounded-xl border border-stone-300 bg-white px-2 text-right text-stone-900 tabular-nums',
                 FOCUS_RING,
@@ -174,14 +189,14 @@ export default function BatchItemRow({
             <button
               type="button"
               className={ICON_BUTTON}
-              onClick={() => onBump(food.id, BUMP_STEP)}
-              aria-label={`${food.name} 增加 ${BUMP_STEP} 克`}
+              onClick={() => onBump(food.id, 1)}
+              aria-label={`${food.name} 增加 ${step} 克`}
             >
               <Plus size={18} aria-hidden="true" />
             </button>
             {/* 放不下時(390px)自動換到下一行 */}
             <span className="ml-1 text-xs text-stone-600 tabular-nums">
-              每餐 {perMealGrams} g
+              {isPerMeal ? `共買 ${batchGrams} g` : `每餐 ${perMealGrams} g`}
             </span>
           </>
         )}

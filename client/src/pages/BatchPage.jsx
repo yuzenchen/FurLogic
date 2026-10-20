@@ -4,6 +4,7 @@ import { DAILY_STATUS_LABELS, capKindOf, planGapFill } from '@furlogic/shared';
 import BatchItemRow from '../components/batch/BatchItemRow';
 import FoodSearchSheet from '../components/batch/FoodSearchSheet';
 import MealAnalysisCard from '../components/batch/MealAnalysisCard';
+import Segmented from '../components/foods/Segmented';
 import useTwoStepConfirm from '../components/foods/useTwoStepConfirm';
 import {
   Button,
@@ -39,11 +40,16 @@ const statusText = (status, diff) => {
 /** 克數顯示:整數不帶小數,其餘一位小數 */
 const fmtGrams = (g) => (Number.isInteger(g) ? String(g) : g.toFixed(1));
 
-/** 批次製作:輸入各食材採買總量與餐數 → 每餐克數;缺口由主力瘦肉補齊(不存伺服器) */
+const INPUT_MODE_OPTIONS = [
+  { value: 'batch', label: '採買總量' },
+  { value: 'perMeal', label: '每餐' },
+];
+
+/** 批次製作:輸入各食材採買總量(或每餐份量)與餐數 → 每餐克數;缺口由主力瘦肉補齊(不存伺服器) */
 export default function BatchPage() {
   const { metrics } = usePet();
   const draft = useBatchDraft();
-  const { items, mealsCount, mealTargetOverride } = draft;
+  const { items, mealsCount, mealTargetOverride, inputMode } = draft;
   const [searchOpen, setSearchOpen] = useState(false);
   const clearConfirm = useTwoStepConfirm();
 
@@ -94,7 +100,7 @@ export default function BatchPage() {
     <>
       <PageHeader
         title="批次製作"
-        subtitle="輸入採買總量與餐數,主力瘦肉依熱量缺口補齊"
+        subtitle="輸入採買總量或每餐份量,主力瘦肉依熱量缺口補齊"
         action={
           hasItems && (
             <Button
@@ -127,23 +133,33 @@ export default function BatchPage() {
         padding="px-4 pt-4 pb-1"
         className="mb-4"
       >
-        <h2 id="batch-items-title" className="font-semibold text-stone-900">
-          食材與採買總量
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="batch-items-title" className="font-semibold text-stone-900">
+            食材
+          </h2>
+          <div className="shrink-0">
+            <Segmented
+              label="輸入模式"
+              value={inputMode}
+              options={INPUT_MODE_OPTIONS}
+              onChange={draft.setInputMode}
+            />
+          </div>
+        </div>
         {hasItems ? (
           <>
-            <ul
-              className="divide-y divide-stone-100"
-              aria-label="食材與採買總量"
-            >
+            <ul className="divide-y divide-stone-100" aria-label="食材">
               {items.map((item, i) => (
                 <BatchItemRow
                   key={item.food.id ?? item.food.name}
                   item={item}
                   planItem={plan.items[i]}
                   capWarning={capWarningByKind.get(capKindOf(item.food))}
+                  inputMode={inputMode}
+                  mealsCount={mealsCount}
                   onSetRole={draft.setRole}
                   onSetBatchGrams={draft.setBatchGrams}
+                  onSetGramsPerMeal={draft.setGramsPerMeal}
                   onBump={draft.bump}
                   onRemove={draft.removeFood}
                 />
@@ -190,6 +206,9 @@ export default function BatchPage() {
       {showResult && (
         <>
           <PerMealCard plan={plan} mealTarget={mealTarget} className="mb-4" />
+          {inputMode === 'perMeal' && (
+            <PurchaseCard plan={plan} className="mb-4" />
+          )}
           <div className="mb-4">
             <MealAnalysisCard
               title="每餐營養"
@@ -496,6 +515,40 @@ function PerMealCard({ plan, mealTarget, className }) {
           </ul>
         </section>
       )}
+    </Card>
+  );
+}
+
+/** 採買總量清單(只在「每餐」輸入模式顯示;採買總量模式下輸入即總量,不重複) */
+function PurchaseCard({ plan, className }) {
+  const { items, mealsCount, batch } = plan;
+  const rows = items.filter((item) => item.batchGrams > 0);
+
+  return (
+    <Card
+      as="section"
+      aria-labelledby="batch-purchase-title"
+      className={cx('space-y-2', className)}
+    >
+      <h2 id="batch-purchase-title" className="font-semibold text-stone-900">
+        採買總量({mealsCount} 餐)
+      </h2>
+      <ul className="space-y-1">
+        {rows.map((item) => (
+          <li
+            key={item.id ?? item.name}
+            className="flex items-baseline justify-between gap-3 text-sm text-stone-800"
+          >
+            <span className="min-w-0 break-words">{item.name}</span>
+            <span className="shrink-0 tabular-nums">
+              {fmtGrams(item.batchGrams)} g
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="border-t border-stone-200 pt-2 text-right text-sm font-semibold text-stone-900 tabular-nums">
+        合計 {fmtGrams(batch.totals.grams)} g
+      </p>
     </Card>
   );
 }

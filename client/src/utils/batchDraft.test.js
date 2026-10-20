@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BUMP_STEP_BATCH,
+  BUMP_STEP_PER_MEAL,
   batchDraftReducer,
   emptyBatchDraft,
   snapshotFood,
+  toInputMode,
   toMealTargetOverride,
   toMealsCount,
   toPlanItems,
@@ -131,12 +134,59 @@ describe('toMealTargetOverride', () => {
 });
 
 describe('batchDraftReducer', () => {
-  it('starts with 2 meals, no override and no items', () => {
+  it('starts with 2 meals, no override, batch input mode and no items', () => {
     expect(empty).toEqual({
       mealsCount: 2,
       mealTargetOverride: null,
+      inputMode: 'batch',
       items: [],
     });
+  });
+
+  it('setInputMode accepts batch / perMeal, falls back to batch and keeps identity when unchanged', () => {
+    const s = run(empty, { type: 'setInputMode', mode: 'perMeal' });
+    expect(s.inputMode).toBe('perMeal');
+    expect(run(s, { type: 'setInputMode', mode: 'nope' }).inputMode).toBe(
+      'batch',
+    );
+    expect(batchDraftReducer(empty, { type: 'setInputMode', mode: 'x' })).toBe(
+      empty,
+    );
+    expect(
+      batchDraftReducer(s, { type: 'setInputMode', mode: 'perMeal' }),
+    ).toBe(s);
+    expect(toInputMode(undefined)).toBe('batch');
+    expect(toInputMode('perMeal')).toBe('perMeal');
+  });
+
+  it('setMealsCount in perMeal mode rescales batchGrams so per-meal grams stay the same', () => {
+    const s = run(
+      empty,
+      { type: 'setInputMode', mode: 'perMeal' },
+      add(pumpkin), // 100 g 總量 = 每餐 50 g × 2 餐
+      add(rice),
+      { type: 'setBatchGrams', id: 5, grams: 33.4 },
+      { type: 'setMealsCount', mealsCount: 5 },
+    );
+    expect(s.items.map((i) => i.batchGrams)).toEqual([250, 83.5]);
+    expect(toPlanItems(s.items, s.mealsCount)[0].gramsPerMeal).toBe(50);
+    const t = run(s, { type: 'setMealsCount', mealsCount: 3 });
+    expect(t.items.map((i) => i.batchGrams)).toEqual([150, 50.1]);
+  });
+
+  it('setGramsPerMeal stores batchGrams = round1(grams × mealsCount)', () => {
+    const base = run(empty, add(rice), {
+      type: 'setMealsCount',
+      mealsCount: 3,
+    });
+    const grams = (g) =>
+      run(base, { type: 'setGramsPerMeal', id: 5, grams: g }).items[0]
+        .batchGrams;
+    expect(grams(70)).toBe(210);
+    expect(grams('12.34')).toBe(37);
+    expect(grams(-5)).toBe(0);
+    expect(grams(NaN)).toBe(0);
+    expect(grams('')).toBe(0);
   });
 
   it('setMealsCount clamps to 1–60 and keeps identity when unchanged', () => {
@@ -254,7 +304,8 @@ describe('batchDraftReducer', () => {
     expect(grams('12.56')).toBe(12.6);
   });
 
-  it('bump steps by 50 with a floor of 0', () => {
+  it('bump steps by 50 in batch mode with a floor of 0', () => {
+    expect(BUMP_STEP_BATCH).toBe(50);
     const base = run(empty, add(chicken), {
       type: 'setBatchGrams',
       id: 1,
@@ -268,15 +319,38 @@ describe('batchDraftReducer', () => {
     ).toBe(0);
   });
 
-  it('clear empties items and override but keeps mealsCount', () => {
+  it('bump steps by 10 × mealsCount in perMeal mode with a floor of 0', () => {
+    expect(BUMP_STEP_PER_MEAL).toBe(10);
+    const base = run(
+      empty,
+      { type: 'setInputMode', mode: 'perMeal' },
+      { type: 'setMealsCount', mealsCount: 3 },
+      add(chicken),
+      { type: 'setBatchGrams', id: 1, grams: 20 },
+    );
+    expect(
+      run(base, { type: 'bump', id: 1, delta: 1 }).items[0].batchGrams,
+    ).toBe(50);
+    expect(
+      run(base, { type: 'bump', id: 1, delta: -1 }).items[0].batchGrams,
+    ).toBe(0);
+  });
+
+  it('clear empties items and override but keeps mealsCount and inputMode', () => {
     const s = run(
       empty,
       add(chicken),
       { type: 'setMealsCount', mealsCount: 5 },
+      { type: 'setInputMode', mode: 'perMeal' },
       { type: 'setMealTargetOverride', mealTarget: 400 },
       { type: 'clear' },
     );
-    expect(s).toEqual({ mealsCount: 5, mealTargetOverride: null, items: [] });
+    expect(s).toEqual({
+      mealsCount: 5,
+      mealTargetOverride: null,
+      inputMode: 'perMeal',
+      items: [],
+    });
   });
 
   it('returns the same state for unknown actions', () => {

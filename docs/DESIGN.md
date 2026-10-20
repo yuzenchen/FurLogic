@@ -56,7 +56,7 @@
 
 ### 批次製作 `pages/BatchPage.jsx`(分頁 `batch`)
 
-批次鮮食採買計算器,**不存伺服器**。使用者輸入每項食材的**採買總量**(整批生重)與餐數,系統算出每餐克數;主力瘦肉由熱量缺口反推。草稿存 localStorage `furlogic_batch_draft`,形狀 `{ mealsCount: number, mealTargetOverride: number|null, items: [{ food, role, batchGrams }] }`(`mealsCount` 製作餐數 1–60,預設 2,清空時保留;`mealTargetOverride` 本次單餐目標 kcal,null 表示用毛孩設定,清空時清掉;`role` 為 `fixed|variant|main`;`batchGrams` 整批採買總量,≥ 0 一位小數)。讀取相容前一版形狀:item 只有 `gramsPerMeal`(無 `batchGrams`)→ `batchGrams = round1(gramsPerMeal × mealsCount)`;更舊的(`servings`/`grams`/`vegWeightPct`)不遷移,直接視為無效。計算用 shared `planGapFill`(不變),client 先以 `toPlanItems(items, mealsCount)` 把 `batchGrams ÷ mealsCount` 換成 `gramsPerMeal`(不四捨五入)再呼叫;改餐數不動 `batchGrams`,每餐量隨之改變。加入食材時預設角色:`recipeRole === 'protein'` 且尚無主力 → `main`,已有主力 → `variant`,其他 → `fixed`;預設總量 `defaultGramsPerMeal(food) × mealsCount`;設某項為 `main` 時原本的主力降為 `variant`(最多一個主力)。
+批次鮮食採買計算器,**不存伺服器**。使用者可切換兩種輸入模式:**採買總量**(整批生重,預設)或**每餐**克數,加上餐數,系統算出另一邊;主力瘦肉由熱量缺口反推。草稿存 localStorage `furlogic_batch_draft`,形狀 `{ mealsCount: number, mealTargetOverride: number|null, inputMode: 'batch'|'perMeal', items: [{ food, role, batchGrams }] }`(`mealsCount` 製作餐數 1–60,預設 2,清空時保留;`mealTargetOverride` 本次單餐目標 kcal,null 表示用毛孩設定,清空時清掉;`inputMode` 輸入模式,預設 `batch`,缺少或非法值讀成 `batch`,清空時保留;`role` 為 `fixed|variant|main`;`batchGrams` 整批採買總量,≥ 0 一位小數——**不論模式 item 內部一律存 `batchGrams`**,每餐模式只是輸入時換算 `batchGrams = round1(g × mealsCount)`)。讀取相容前一版形狀:item 只有 `gramsPerMeal`(無 `batchGrams`)→ `batchGrams = round1(gramsPerMeal × mealsCount)`;更舊的(`servings`/`grams`/`vegWeightPct`)不遷移,直接視為無效。計算用 shared `planGapFill`(不變),client 先以 `toPlanItems(items, mealsCount)` 把 `batchGrams ÷ mealsCount` 換成 `gramsPerMeal`(不四捨五入)再呼叫。改餐數:`batch` 模式不動 `batchGrams`(每餐量隨之改變);`perMeal` 模式每項 `batchGrams = round1(batchGrams ÷ 舊餐數 × 新餐數)`(每餐量不變)。步進(`bump`)依模式:`batch` ±50(`BUMP_STEP_BATCH`);`perMeal` 每餐 ±10(`BUMP_STEP_PER_MEAL`,換成總量 = 10 × 餐數)。加入食材時預設角色:`recipeRole === 'protein'` 且尚無主力 → `main`,已有主力 → `variant`,其他 → `fixed`;預設總量 `defaultGramsPerMeal(food) × mealsCount`;設某項為 `main` 時原本的主力降為 `variant`(最多一個主力)。
 
 **計算規則:缺口填補**(shared `planGapFill`,每餐 = 固定班底 + 替換肉類 + 主力瘦肉):
 
@@ -68,12 +68,12 @@
 - **每餐上限**(`MEAL_CAPS`,超過只警告不強制,含反推後的主力):蔬菜合計 ≤ 50 g(`type === 'veg'`)、內臟 ≤ 12 g(`subtype === 'organ'`)、高脂魚 ≤ 65 g(`subtype === 'fatty_fish'`)。加入食材時預設每餐克數即為上限值(`defaultGramsPerMeal`,草稿存的是 × 餐數後的總量),其他食材 0 g。
 - **每餐克數 = 採買總量 ÷ 餐數**(`mealsCount`,整數 ≥ 1);主力的採買總量 = 反推每餐克數 × 餐數;整批營養與補充品(蛋殼粉)以整批克數計算,約可吃天數 = 餐數 ÷ 每日餐數。
 
-1. `PageHeader`「批次製作」/「輸入採買總量與餐數,主力瘦肉依熱量缺口補齊」;有食材時右上 ghost「清空」(兩段式確認)。
+1. `PageHeader`「批次製作」/「輸入採買總量或每餐份量,主力瘦肉依熱量缺口補齊」;有食材時右上 ghost「清空」(兩段式確認)。
 2. 提示列(Info 圖示):「營養數值為生食基準,請輸入下鍋前的生重」。
 3. 「單餐目標」卡:「毛孩設定 {mealTarget} kcal(DER ÷ {mealsPerDay} 餐)」(`text-sm stone-600`);輸入列「本次目標」+ `inputMode="numeric"` 輸入框(h-11、w-24、右對齊,placeholder 為毛孩值)+「kcal」;有覆寫且 ≠ 毛孩值時右側 ghost「還原」。有效目標 = `mealTargetOverride ?? metrics.mealTargetRaw`。沒有毛孩目標也沒覆寫時顯示 `amber-700`「請先在「毛孩」設定體重,或輸入本次目標」。
-4. 「食材與採買總量」卡:每項 `BatchItemRow`:
+4. 「食材」卡:標題列右側 `Segmented`(`aria-label="輸入模式"`,選項「採買總量」/「每餐」,切換呼叫 `setInputMode`)。每項 `BatchItemRow`(接 `inputMode`、`mealsCount`):
    - 第一行:角色圖示(main → `Drumstick` orange-500;variant → `Beef`,高脂魚 `Fish`,stone-700;fixed → `Leaf` emerald-600;蔬菜一律 Leaf)、名稱(粗體)、小字 `{kcal/100g} kcal/100g`(蔬菜「蔬菜 · 不計熱量」)+ 注意警語(amber-700);右側本餐 kcal(蔬菜不顯示)。
-   - 第二行:角色 `<select>`(h-11,`ITEM_ROLE_LABELS`,`aria-label="{name} 角色"`)+ 採買總量控制:fixed / variant 為 −50 / 輸入框(`aria-label="{name} 採買總量"`,一位小數)/ +50 /「g」,右側(放不下時換下一行)`text-xs stone-600 tabular-nums`「每餐 {planItem.gramsPerMeal} g」;main 不給輸入,顯示 `Wand2` +「自動補齊 每餐 {gramsPerMeal} g · 共買 {batchGrams} g」粗體 orange-700(0 g 時 stone-600)。移除鈕在第一行右側。
+   - 第二行:角色 `<select>`(h-11,`ITEM_ROLE_LABELS`,`aria-label="{name} 角色"`)+ 克數控制(fixed / variant):`batch` 模式 −50 / 輸入框(值 = `batchGrams`,`aria-label="{name} 採買總量"`,一位小數)/ +50 /「g」,右側(放不下時換下一行)`text-xs stone-600 tabular-nums`「每餐 {planItem.gramsPerMeal} g」;`perMeal` 模式 −10 / 輸入框(值 = `round1(batchGrams ÷ mealsCount)`,`aria-label="{name} 每餐克數"`)/ +10 /「g」,右側小字「共買 {batchGrams} g」。main 兩種模式都不給輸入,顯示 `Wand2` +「自動補齊 每餐 {gramsPerMeal} g · 共買 {batchGrams} g」粗體 orange-700(0 g 時 stone-600)。移除鈕在第一行右側。
    - 該列 `capKindOf(food)` 出現在 `capWarnings` 時列底加 `amber-700 text-xs`「{label}每餐建議 ≤ {cap} g,目前合計 {grams} g」(同類多列都顯示)。
    - 卡底摘要列(`border-t`,`text-sm tabular-nums`,三欄):「固定 {fixedKcal}」「替換 {variantKcal}」「缺口 {gapKcal} kcal」(缺口 < 0 用 rose-700)。`warnings` 文字(`text-xs`):`no_main`「請把一項肉類設為「主力瘦肉」,系統會算出它每餐需要幾克」(stone-600);`main_no_energy`「主力瘦肉必須是有熱量的食材」(amber-700);`over_target`「固定 + 替換已超過目標 {excessKcal} kcal,主力 0 g」(rose-700;excess 0 時「剛好達到目標,主力 0 g」stone-600);`multiple_main` 不顯示(reducer 保證最多一個主力)。
    - 空清單:`EmptyState`(Utensils)「還沒加入食材」+ 主按鈕「加入食材」。
@@ -83,7 +83,8 @@
    - 底部 footer 主按鈕(block、lg):「加入 {n} 項」(0 項時「加入食材」並 disabled);按下依勾選順序逐一加入草稿(套用預設角色規則,第一個肉類成主力)後關閉。
    - 線上查詢 / 手動新增儲存後直接加入並關閉抽屜(已勾選項先一併加入)。
 6. 「餐數」卡(`MealsCountCard`):步進器 − [N] +(1–60,按鈕 44px,`aria-label="減少 1 餐"/"增加 1 餐"`,輸入框 `aria-label="餐數"`)+「餐」;「約可吃 {daysCovered} 天(每日 {mealsPerDay} 餐)」。
-7. 「每餐結果」卡(有食材且有目標時顯示;唯一視覺重點):白卡 + `orange-50` 內層面板;「每餐 {kcal} kcal」(數字 `text-4xl font-bold tabular-nums`)、「/ 目標 {目標} kcal」、`StatusBadge`(與每日相同 90–110% 規則)+「比目標少 X kcal」/「接近目標」/「比目標多 X kcal」、「每餐生重約 {perMealGrams} g」;面板下方「每餐含」列出各食材 `{name} {gramsPerMeal} g`(主力列加小字「主力」orange-700,克數後加 `text-xs stone-600`「(共買 {batchGrams} g)」)。沒有獨立的採買總量卡——輸入即總量。
+7. 「每餐結果」卡(有食材且有目標時顯示;唯一視覺重點):白卡 + `orange-50` 內層面板;「每餐 {kcal} kcal」(數字 `text-4xl font-bold tabular-nums`)、「/ 目標 {目標} kcal」、`StatusBadge`(與每日相同 90–110% 規則)+「比目標少 X kcal」/「接近目標」/「比目標多 X kcal」、「每餐生重約 {perMealGrams} g」;面板下方「每餐含」列出各食材 `{name} {gramsPerMeal} g`(主力列加小字「主力」orange-700,克數後加 `text-xs stone-600`「(共買 {batchGrams} g)」)。
+   - `perMeal` 模式下其後再顯示「採買總量({mealsCount} 餐)」卡(`PurchaseCard`):每項 `{name} — {batchGrams} g`(整數不帶小數,只列 > 0 者),底部 `border-t` 右對齊粗體「合計 {batch.totals.grams} g」;`batch` 模式隱藏(輸入即總量,不重複)。
 8. `MealAnalysisCard`「每餐營養」(`result={perMeal}`、`batchSupplements={batch.supplements}`):統計、鈣磷比量表、巨量營養素;建議補充中克數類(蛋殼粉)顯示「整批加 X・每餐 Y」,按顆計的魚油只顯示「每餐 1 顆」。
 
 ### 食材 `pages/FoodsPage.jsx`(分頁 `foods`)

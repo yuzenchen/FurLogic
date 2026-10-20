@@ -3,6 +3,7 @@
  * 毛孩資料、食材都存在 API,這裡只放 UI 偏好、批次草稿與舊版資料遷移。
  */
 import { ITEM_ROLES } from '@furlogic/shared';
+import { toInputMode } from './batchDraft';
 
 const KEYS = {
   ACTIVE_TAB: 'furlogic_active_tab',
@@ -119,7 +120,8 @@ const isValidTargetOverride = (v) =>
  * 讀批次草稿;順便清掉已停用的單餐草稿 key。格式不符回 null。
  * 相容舊形狀:item 只有 gramsPerMeal(無 batchGrams)→ batchGrams = round1(gramsPerMeal × mealsCount)。
  * 更舊的形狀(servings / grams / vegWeightPct)不遷移,直接視為無效。
- * @returns {{ mealsCount: number, mealTargetOverride: number|null, items: Array<{ food: object, role: string, batchGrams: number }> } | null}
+ * inputMode 缺少或非法 → 'batch'。
+ * @returns {{ mealsCount: number, mealTargetOverride: number|null, inputMode: 'batch'|'perMeal', items: Array<{ food: object, role: string, batchGrams: number }> } | null}
  */
 export const getBatchDraft = () => {
   removeRaw(KEYS.LEGACY_SINGLE_DRAFT);
@@ -136,6 +138,7 @@ export const getBatchDraft = () => {
   return {
     mealsCount: draft.mealsCount,
     mealTargetOverride: draft.mealTargetOverride ?? null,
+    inputMode: toInputMode(draft.inputMode),
     items: draft.items.map((item) =>
       normalizeDraftItem(item, draft.mealsCount),
     ),
