@@ -1,24 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Globe, Search } from 'lucide-react';
+import { Check, Search, Sparkles } from 'lucide-react';
 import { FOOD_TYPES } from '@furlogic/shared';
-import { ApiError, lookupFood } from '../../api/client';
 import useFoods from '../../hooks/useFoods';
-import FoodFormSheet from '../foods/FoodFormSheet';
+import AddFoodSheet from '../foods/AddFoodSheet';
 import SafetyBadge from '../foods/SafetyBadge';
 import useDebouncedValue from '../foods/useDebouncedValue';
 import { BottomSheet, Button, ErrorState, FOCUS_RING, cx } from '../ui';
 
 /**
  * 「加入食材」抽屜:搜尋資料庫 → 勾選多項 → 底部「加入 N 項」一次加入;
- * 找不到時可線上查詢或手動新增(儲存後連同已勾選項一起加入並關閉)。
- * 新增食材的表單會暫時取代這個抽屜,取消後回到搜尋。父元件需要時才掛載。
+ * 找不到時可用 AI 新增食材(儲存後連同已勾選項一起加入並關閉)。
+ * 新增食材抽屜(AddFoodSheet)會暫時取代這個抽屜,取消後回到搜尋。父元件需要時才掛載。
  * @param {Set<number>} addedIds 已在計算頁草稿中的食材 id
  * @param {(food: object) => void} onAdd 加入計算頁草稿
  */
 export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
   const [query, setQuery] = useState('');
-  const [form, setForm] = useState(null); // { mode, initial, confidence, notice }
-  const [looking, setLooking] = useState(false);
+  const [adding, setAdding] = useState(null); // { initialName } | null
   const [message, setMessage] = useState(null);
   // 已勾選的食材(Map 保留勾選順序);換搜尋字不清掉
   const [selected, setSelected] = useState(() => new Map());
@@ -27,10 +25,10 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
 
   // BottomSheet 開啟時會 focus 第一個元素(關閉鈕);下一個 frame 改 focus 搜尋框
   useEffect(() => {
-    if (form) return undefined;
+    if (adding) return undefined;
     const id = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(id);
-  }, [form]);
+  }, [adding]);
   const { data, loading, error, refetch } = useFoods({ q: q || undefined });
 
   const toggle = (food) => {
@@ -51,34 +49,19 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
     onClose();
   };
 
-  const openManual = (notice) =>
-    setForm({ mode: 'manual', initial: { name: q.slice(0, 40) }, notice });
-
-  const runLookup = async () => {
-    setLooking(true);
+  const openAdd = (initialName = '') => {
     setMessage(null);
-    try {
-      const { draft, confidence } = await lookupFood(q);
-      setForm({ mode: 'lookup', initial: draft, confidence });
-    } catch (err) {
-      if (err instanceof ApiError && err.code === 'lookup_unavailable') {
-        openManual('線上查詢未設定,請手動輸入每 100g 營養值');
-      } else {
-        openManual(`查詢失敗:${err?.message || '未知錯誤'},請手動輸入`);
-      }
-    } finally {
-      setLooking(false);
-    }
+    setAdding({ initialName });
   };
 
   const handleSaved = (food) => {
     if (food.safety === 'toxic') {
-      setForm(null);
+      setAdding(null);
       setMessage(`已將「${food.name}」存入食材庫(對狗有毒,未加入計算)`);
       refetch();
       return;
     }
-    setForm(null);
+    setAdding(null);
     commit(food);
   };
 
@@ -98,13 +81,8 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
     list = (
       <div className="py-6 text-center">
         <p className="text-sm text-stone-800">資料庫找不到「{q}」</p>
-        <Button
-          icon={Globe}
-          className="mt-3"
-          loading={looking}
-          onClick={runLookup}
-        >
-          線上查詢「{q}」
+        <Button icon={Sparkles} className="mt-3" onClick={() => openAdd(q)}>
+          用 AI 新增「{q}」
         </Button>
       </div>
     );
@@ -135,7 +113,7 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
   return (
     <>
       <BottomSheet
-        open={!form}
+        open={!adding}
         onClose={onClose}
         title="加入食材"
         footer={
@@ -197,25 +175,22 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
         <div className="mt-2 border-t border-stone-100 pt-2 text-center">
           <button
             type="button"
-            onClick={() => openManual(undefined)}
+            onClick={() => openAdd()}
             className={cx(
               'h-11 rounded-xl px-3 text-sm font-semibold text-orange-700 underline underline-offset-2 hover:bg-orange-50',
               FOCUS_RING,
             )}
           >
-            手動新增食材
+            新增食材
           </button>
         </div>
       </BottomSheet>
 
-      {form && (
-        <FoodFormSheet
-          mode={form.mode}
-          initial={form.initial}
-          confidence={form.confidence}
-          notice={form.notice}
+      {adding && (
+        <AddFoodSheet
+          initialName={adding.initialName}
           context="batch"
-          onClose={() => setForm(null)}
+          onClose={() => setAdding(null)}
           onSaved={handleSaved}
         />
       )}

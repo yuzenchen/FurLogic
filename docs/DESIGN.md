@@ -90,7 +90,7 @@
    - 空清單:`EmptyState`(Utensils)「還沒加入食材」+ 主按鈕「加入食材」;有食材時卡底 secondary block「加入食材」,開啟 `FoodSearchSheet` 抽屜(可複選):
      - 每列為 toggle(`role="checkbox"`、`aria-checked`、`aria-label` 為食材名),右側 `SafetyBadge` 左邊 20px 圓圈(未選 `border-2 stone-300`;選中 `orange-700` 實心內含白色 `Check` 14px),選中列底 `orange-50`;有毒(「對狗有毒,不可加入」)或已加入(「已加入」)者 disabled、不顯示圓圈。
      - 已選項保存在抽屜內(保留勾選順序),換搜尋字不清掉;搜尋框下方有勾選時顯示 `text-xs stone-600`「已選 {n} 項:{名稱以、串接,超過 3 個加…}」+ 右側 ghost「清除」。
-     - 底部 footer 主按鈕(block、lg):「加入 {n} 項」(0 項時「加入食材」並 disabled);按下依勾選順序逐一加入草稿後關閉。線上查詢 / 手動新增儲存後直接加入並關閉抽屜(已勾選項先一併加入)。
+     - 底部 footer 主按鈕(block、lg):「加入 {n} 項」(0 項時「加入食材」並 disabled);按下依勾選順序逐一加入草稿後關閉。找不到結果時顯示「用 AI 新增「{q}」」(Sparkles)、清單底部連結「新增食材」,都開 `AddFoodSheet`(前者帶入 q,`context="batch"`);儲存後直接加入並關閉抽屜(已勾選項先一併加入;有毒食材只存入食材庫並提示)。
 5. 「餐數」卡(有食材時):步進器 − [N] +(1–60,按鈕 44px,`aria-label="減少 1 餐"/"增加 1 餐"`,輸入框 `aria-label="餐數"`)+「餐」;「約可吃 {daysCovered} 天(每日 {mealsPerDay} 餐)」。
 6. 主按鈕「計算」(`Calculator`、primary、block、lg)。停用條件依序:無食材、任一類別食材合計 ≠ 類別 %、類別合計 ≠ 100、無目標;停用時按鈕下方 `text-xs stone-600` 說明第一個未滿足的條件。
 7. **收合**:按「計算」且 `result.ok` → 第 3–6 項(單餐目標卡、食材比例卡、餐數卡、計算按鈕)整組換成「計算條件」摘要卡(`Card`,`aria-label="計算條件"`):第一行 `text-sm font-semibold stone-900`「計算條件」+ 右側 secondary「編輯比例」(Pencil);內容 `text-sm stone-700 tabular-nums`,每類一行「{類別} {類別%}% — {食材名 %、…}」,最後一行「目標 {kcal} kcal · {餐數} 餐」。「編輯比例」、清空、重新整理、或結果變 stale(例如毛孩設定改了目標)時展開。計算成功後 `<main>` 捲到最上方(摘要卡 + 結果卡自然在視野內);失敗時捲到錯誤訊息。每次成功都把本次計算存成「最近一次計算」(見 AI 復盤)。
@@ -101,6 +101,24 @@
 ### 食材 `pages/FoodsPage.jsx`(分頁 `foods`)
 
 搜尋、篩選、自訂食材新增/編輯/刪除。卡片「加入計算」把食材加入計算頁草稿並切到 `batch` 分頁。`FoodSearchSheet`(計算頁的複選抽屜,底部「加入 N 項」)/ `FoodFormSheet` 在 `context="batch"` 時「儲存並加入」會把新食材連同已勾選項加入計算頁草稿並關閉抽屜(有毒食材只存入食材庫)。
+
+右上「新增」與「還沒有自訂食材」的「新增」開 `AddFoodSheet`(帶入目前搜尋字);卡片「編輯」開 `FoodFormSheet`(mode 'edit')。手動輸入只從 AddFoodSheet 的「改為手動輸入 / 手動輸入」進入,不另放入口。
+
+#### 新增食材 `components/foods/AddFoodSheet.jsx`
+
+只輸入**食材名稱**,由 AI 回填營養(API `POST /api/foods/lookup { query }` → `{ draft, confidence: high|medium|low, note, cached }`,不寫入食材庫);先預覽再儲存。Props:`initialName`、`context` foods/batch、`onClose`、`onSaved(food)`。BottomSheet 標題「新增食材」,同一個 sheet 換內容:
+
+1. **輸入名稱**:說明 `text-sm stone-600`「輸入食材名稱，AI 會依資料庫格式填好營養值」;輸入框 h-11、`aria-label="食材名稱"`、maxLength 50;footer 主按鈕「AI 查詢」(Sparkles、block、lg;空字串停用;查詢中 spinner +「AI 查詢中…」並停用);Enter 送出。
+2. **預覽**:名稱 `text-xl font-bold` + nameEn(`text-xs stone-600`);徽章列:類別(`FOOD_TYPES` 標籤)、`SafetyBadge`、subtype「內臟」/「高脂魚」、AI 信心(high emerald「AI 信心高」/ medium amber「AI 信心中」/ low rose「AI 信心低」)。`warning` amber-700、`description` stone-700;「每 100 g 營養」兩欄 `Stat`:熱量 kcal、蛋白質 g、脂肪 g、鈣 mg、磷 mg,下方 `text-xs stone-600`「營養以生重計（名稱帶「(熟)」為熟重）」。confidence low 時 amber-50 提示「AI 對這筆數值把握較低，建議手動確認」;`note`、`sourceRef`(「來源：…」)`text-xs stone-600`,有才顯示。
+   - footer:主按鈕(block、lg)「儲存」(`context="batch"` 時「儲存並加入」,有毒「只存入食材庫」)→ `createFood`(draft 只挑 API 允許欄位、截長度、`source: 'ai'`,見 `utils/foodDraft.js`);下一列 secondary「修改」→ `FoodFormSheet` mode 'lookup'(initial = draft)微調後儲存;ghost「重新查詢」回步驟一(保留名稱)。
+   - 同名(409 `duplicate_name`)→ rose-700「已有同名食材「{name}」」。
+3. **錯誤**(停在步驟一,輸入框下方):
+   - 422 `food_unrecognized` → rose-700「AI 看不懂這個食材：{message}」;下一行 `text-xs stone-600`「請換個更明確的名稱，例如「雞胸肉」「冬瓜」」+ 小連結「改為手動輸入」(開 `FoodFormSheet` mode 'manual',帶入名稱)。
+   - 503 `ai_unavailable` → rose「AI 未設定（ANTHROPIC_API_KEY），請改用手動輸入」+ secondary「手動輸入」。
+   - 429(`ai_quota_exceeded` / `rate_limited`)→ rose「AI 額度已用完或太頻繁：{message}」。
+   - 其他(含 `ai_failed`)→ rose「AI 查詢失敗：{message}」+ ghost「重試」。
+
+- `FoodFormSheet` 會暫時取代 AddFoodSheet,取消後回到 AddFoodSheet。
 
 ### AI 復盤 `pages/ReviewPage.jsx`(分頁 `review`)
 

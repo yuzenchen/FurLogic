@@ -43,10 +43,8 @@ export const loadConfig = (env = process.env) => ({
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
-  geminiApiKey: emptyToNull(env.GEMINI_API_KEY),
-  usdaApiKey: emptyToNull(env.USDA_API_KEY),
-  geminiModel: emptyToNull(env.GEMINI_MODEL) ?? 'gemini-2.5-flash',
-  // AI 復盤(Anthropic)。金鑰只從 env 讀,未設定時 /api/ai/review 回 503。
+  // AI 復盤 + 線上查詢食材營養(Anthropic)。金鑰只從 env 讀,
+  // 未設定時 /api/ai/review 與 /api/foods/lookup 回 503 ai_unavailable。
   ai: {
     apiKey: emptyToNull(env.ANTHROPIC_API_KEY),
     model: emptyToNull(env.AI_MODEL) ?? 'claude-opus-5-5',

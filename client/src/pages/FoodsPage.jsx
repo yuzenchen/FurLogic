@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Apple, Plus, Search } from 'lucide-react';
 import { deleteFood } from '../api/client';
 import FoodCard from '../components/foods/FoodCard';
+import AddFoodSheet from '../components/foods/AddFoodSheet';
 import FoodFormSheet from '../components/foods/FoodFormSheet';
 import useDebouncedValue from '../components/foods/useDebouncedValue';
 import {
@@ -31,7 +32,8 @@ export default function FoodsPage() {
   const { addFood } = useBatchDraft();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
-  const [form, setForm] = useState(null); // { mode, initial }
+  const [form, setForm] = useState(null); // 編輯:{ mode: 'edit', initial }
+  const [adding, setAdding] = useState(false);
   const q = useDebouncedValue(query.trim(), 250);
 
   const { data, loading, error, refetch } = useFoods({
@@ -46,7 +48,7 @@ export default function FoodsPage() {
     [data, typeFilter],
   );
 
-  const openCreate = () => setForm({ mode: 'manual', initial: {} });
+  const openCreate = () => setAdding(true);
 
   const handleAdd = (food) => {
     addFood(food);
@@ -60,6 +62,7 @@ export default function FoodsPage() {
 
   const handleSaved = () => {
     setForm(null);
+    setAdding(false);
     refetch();
   };
 
@@ -163,6 +166,15 @@ export default function FoodsPage() {
       </div>
 
       {content}
+
+      {adding && (
+        <AddFoodSheet
+          initialName={q}
+          context="foods"
+          onClose={() => setAdding(false)}
+          onSaved={handleSaved}
+        />
+      )}
 
       {form && (
         <FoodFormSheet

@@ -1,4 +1,4 @@
-import { createNutritionLookup } from '../services/nutritionLookup.js';
+import { createFoodLookup } from '../services/foodLookup.js';
 
 const lookupBody = {
   type: 'object',
@@ -9,12 +9,14 @@ const lookupBody = {
   },
 };
 
-/** POST /foods/lookup — 線上查營養草稿(不寫入 foods)。 */
+/** POST /foods/lookup — 由 Claude 線上查營養草稿(不寫入 foods)。 */
 export default async function lookupRoutes(app, opts) {
-  const service = createNutritionLookup({
+  const service = createFoodLookup({
     db: app.db,
     config: app.config,
-    fetch: opts.fetch ?? globalThis.fetch,
+    ...(opts.createAnthropicClient
+      ? { createClient: opts.createAnthropicClient }
+      : {}),
     log: app.log,
   });
 

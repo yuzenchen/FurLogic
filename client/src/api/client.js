@@ -85,7 +85,12 @@ export const updateFood = (id, patch, opts) =>
   apiFetch(`/foods/${enc(id)}`, { ...opts, method: 'PUT', body: patch });
 export const deleteFood = (id, opts) =>
   apiFetch(`/foods/${enc(id)}`, { ...opts, method: 'DELETE' });
-/** → { draft, confidence, cached } */
+/**
+ * AI 依名稱回填營養(不寫入食材庫;draft 可直接送 createFood,source 為 'ai')
+ * → { draft, confidence: 'high'|'medium'|'low', note, cached }
+ * 錯誤 code:food_unrecognized(422,message 為 AI 說明的原因)/ ai_unavailable(503)/
+ * ai_quota_exceeded、rate_limited(429)/ ai_failed(502)
+ */
 export const lookupFood = (query, opts) =>
   apiFetch('/foods/lookup', { ...opts, method: 'POST', body: { query } });
 

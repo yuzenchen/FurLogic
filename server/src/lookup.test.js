@@ -1,92 +1,94 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app.js';
+import { LOOKUP_SCHEMA, SYSTEM_PROMPT } from './services/foodLookup.js';
+
+const API_KEY = 'test-anthropic-key';
 
 const baseConfig = {
   port: 0,
   host: '127.0.0.1',
   dataDir: '.',
   allowedOrigins: ['http://localhost:3000'],
-  geminiApiKey: null,
-  usdaApiKey: null,
-  geminiModel: 'gemini-2.5-flash',
+  ai: { apiKey: null, model: 'claude-opus-5-5', dailyUsd: 1, monthlyUsd: 10 },
 };
 
-const GEMINI_KEY = 'test-gemini-key';
-const USDA_KEY = 'test-usda-key';
-
-const jsonResponse = (body, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-const geminiReply = (obj) =>
-  jsonResponse({
-    candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }],
-  });
-
-const classification = (overrides = {}) => ({
-  nameZh: '鮭魚',
-  nameEn: 'salmon atlantic raw',
+const salmonDraft = (overrides = {}) => ({
+  name: '鮭魚',
+  nameEn: 'Atlantic salmon',
   type: 'protein',
   recipeRole: 'protein',
   subtype: 'fatty_fish',
   safety: 'safe',
   warning: null,
-  description: '富含 Omega-3 的魚肉。',
+  description: '富含 Omega-3,務必去刺煮熟。',
+  calories: 142.44,
+  protein: 19.84,
+  fat: 6.34,
+  ca: 12,
+  p: 200,
+  sourceRef: 'USDA SR Legacy 估算',
   ...overrides,
 });
 
-const nutrient = (nutrientId, nutrientNumber, value, unitName) => ({
-  nutrientId,
-  nutrientNumber,
-  value,
-  unitName,
+const recognizedReply = (draftOverrides = {}, extra = {}) => ({
+  recognized: true,
+  reason: '',
+  draft: salmonDraft(draftOverrides),
+  confidence: 'high',
+  note: '野生大西洋鮭魚生重。',
+  ...extra,
 });
 
-const salmonFood = {
-  fdcId: 175167,
-  dataType: 'SR Legacy',
-  description: 'Fish, salmon, Atlantic, wild, raw',
-  foodNutrients: [
-    nutrient(1008, '208', 142.4, 'KCAL'),
-    nutrient(1062, '268', 594, 'kJ'),
-    nutrient(1003, '203', 19.84, 'G'),
-    nutrient(1004, '204', 6.34, 'G'),
-    nutrient(1301, '301', 12.4, 'MG'),
-    nutrient(1305, '305', 200.4, 'MG'),
+const unrecognizedReply = (reason) => ({
+  recognized: false,
+  reason,
+  draft: null,
+  confidence: 'low',
+  note: '',
+});
+
+const makeResponse = (obj, overrides = {}) => ({
+  id: 'msg_test',
+  type: 'message',
+  role: 'assistant',
+  model: 'claude-opus-5-5',
+  stop_reason: 'end_turn',
+  content: [
+    { type: 'thinking', thinking: '', signature: 'sig' },
+    { type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj) },
   ],
-};
+  usage: {
+    input_tokens: 2000,
+    output_tokens: 500,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+  },
+  ...overrides,
+});
 
-/** 依 URL 分流的假 fetch;handlers 回傳 Response 或拋錯。 */
-const makeFetch = ({ gemini = [], usda = [] } = {}) => {
-  const queues = { gemini: [...gemini], usda: [...usda] };
-  return vi.fn(async (url) => {
-    const kind = String(url).includes('generativelanguage')
-      ? 'gemini'
-      : String(url).includes('api.nal.usda.gov')
-        ? 'usda'
-        : null;
-    if (!kind) throw new Error(`unexpected url ${url}`);
-    const next = queues[kind].shift();
-    if (!next) throw new Error(`no mock left for ${kind}`);
-    return typeof next === 'function' ? next() : next;
+/** 假 Anthropic client:beta.messages.create 依序回傳 / 拋出 queue 中的項目。 */
+const makeClient = (queue = []) => {
+  const items = [...queue];
+  const create = vi.fn(async () => {
+    const next = items.shift();
+    if (!next) throw new Error('no mock left');
+    if (next instanceof Error) throw next;
+    return next;
   });
+  return { beta: { messages: { create } } };
 };
 
-const callsTo = (fetchMock, host) =>
-  fetchMock.mock.calls.filter(([url]) => String(url).includes(host));
-
-describe('POST /api/foods/lookup', () => {
+describe('POST /api/foods/lookup (Claude)', () => {
   let app;
 
-  const setup = async (configOverrides = {}, fetchMock = makeFetch()) => {
+  const setup = async ({ ai = {}, client = makeClient() } = {}) => {
+    const factory = vi.fn(() => client);
     app = await buildApp({
       dbPath: ':memory:',
-      config: { ...baseConfig, ...configOverrides },
-      fetch: fetchMock,
+      config: { ...baseConfig, ai: { ...baseConfig.ai, ...ai } },
+      createAnthropicClient: factory,
     });
-    return fetchMock;
+    return { client, factory, create: client.beta.messages.create };
   };
 
   const lookup = async (query) => {
@@ -98,282 +100,367 @@ describe('POST /api/foods/lookup', () => {
     return { status: res.statusCode, body: res.json() };
   };
 
+  const usageRows = () =>
+    app.db.prepare('SELECT * FROM ai_usage ORDER BY id').all();
+
+  const cacheRow = (key) =>
+    app.db.prepare('SELECT * FROM lookup_cache WHERE query = ?').get(key);
+
   afterEach(async () => {
     await app?.close();
     app = null;
   });
 
-  it('returns 503 lookup_unavailable when no keys are configured', async () => {
-    const fetchMock = await setup();
+  it('returns 503 ai_unavailable when ANTHROPIC_API_KEY is not set', async () => {
+    const { factory, create } = await setup();
     const res = await lookup('鮭魚');
     expect(res.status).toBe(503);
-    expect(res.body.error).toBe('lookup_unavailable');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.body.error).toBe('ai_unavailable');
+    expect(factory).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
 
-  it('Gemini + USDA happy path returns a high-confidence USDA draft', async () => {
-    const fetchMock = await setup(
-      { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
-      makeFetch({
-        gemini: [geminiReply(classification())],
-        usda: [jsonResponse({ foods: [salmonFood] })],
-      }),
-    );
-    const res = await lookup('  鮭魚  ');
+  it('returns a draft in the POST /api/foods format and sends the expected request', async () => {
+    const { create, factory } = await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([
+        makeResponse(recognizedReply({ name: '大西洋鮭魚' })),
+      ]),
+    });
+    const res = await lookup('  大西洋 鮭魚  ');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       draft: {
-        name: '鮭魚',
-        nameEn: 'salmon atlantic raw',
+        name: '大西洋鮭魚',
+        nameEn: 'Atlantic salmon',
         type: 'protein',
         recipeRole: 'protein',
         subtype: 'fatty_fish',
         safety: 'safe',
         warning: null,
-        description: '富含 Omega-3 的魚肉。',
-        calories: 142,
+        description: '富含 Omega-3,務必去刺煮熟。',
+        calories: 142.4,
         protein: 19.8,
         fat: 6.3,
         ca: 12,
         p: 200,
-        source: 'usda',
-        sourceRef: 'FDC 175167',
+        source: 'ai',
+        sourceRef: 'USDA SR Legacy 估算',
       },
       confidence: 'high',
+      note: '野生大西洋鮭魚生重。',
       cached: false,
     });
 
-    const [geminiUrl, geminiInit] = callsTo(fetchMock, 'generativelanguage')[0];
-    expect(geminiUrl).toContain('gemini-2.5-flash:generateContent');
-    expect(geminiUrl).not.toContain(GEMINI_KEY);
-    const geminiBody = JSON.parse(geminiInit.body);
-    expect(geminiBody.generationConfig.responseMimeType).toBe(
-      'application/json',
-    );
-    expect(geminiBody.generationConfig.responseSchema).toBeTruthy();
-    expect(geminiBody.generationConfig.responseSchema.required).toContain(
-      'subtype',
-    );
-    expect(geminiBody.contents[0].parts[0].text).toContain('subtype');
-    expect(geminiInit.signal).toBeInstanceOf(AbortSignal);
-
-    const [usdaUrl, usdaInit] = callsTo(fetchMock, 'api.nal.usda.gov')[0];
-    expect(usdaUrl).toBe(
-      `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${USDA_KEY}`,
-    );
-    expect(usdaInit.method).toBe('POST');
-    expect(JSON.parse(usdaInit.body)).toEqual({
-      query: 'salmon atlantic raw',
-      dataType: ['Foundation', 'SR Legacy'],
-      pageSize: 10,
+    expect(factory).toHaveBeenCalledWith(API_KEY);
+    const [request] = create.mock.calls[0];
+    expect(request.model).toBe('claude-opus-5-5');
+    expect(request.system).toBe(SYSTEM_PROMPT);
+    expect(request.thinking).toBeUndefined();
+    expect(request.max_tokens).toBeGreaterThanOrEqual(8000);
+    expect(request.output_config).toEqual({
+      effort: 'low',
+      format: { type: 'json_schema', schema: LOOKUP_SCHEMA },
     });
-    expect(usdaInit.signal).toBeInstanceOf(AbortSignal);
+    expect(request.betas).toEqual(['server-side-fallback-2026-07-01']);
+    expect(request.fallbacks).toBe('default');
+    expect(request.messages[0].content).toContain('<query>大西洋 鮭魚</query>');
+
+    // 草稿可以直接送去建立食材
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/foods',
+      payload: res.body.draft,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ name: '大西洋鮭魚', source: 'ai' });
   });
 
-  it('prefers a Foundation food and parses Atwater-only energy (2047)', async () => {
-    const foundation = {
-      fdcId: 2346393,
-      dataType: 'Foundation',
-      foodNutrients: [
-        nutrient(2047, '957', 120.6, 'KCAL'),
-        nutrient(1003, '203', 22.55, 'G'),
-        nutrient(1004, '204', 2.62, 'G'),
-        // 缺鈣、磷 → 0
-      ],
-    };
-    const noEnergyFoundation = {
-      fdcId: 1,
-      dataType: 'Foundation',
-      foodNutrients: [nutrient(1003, '203', 30, 'G')],
-    };
-    await setup(
-      { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
-      makeFetch({
-        gemini: [
-          geminiReply(
-            classification({
-              nameZh: '雞胸肉',
-              nameEn: 'chicken',
-              subtype: 'bogus', // 非法值 → null
-            }),
+  it('passes through medium / low confidence', async () => {
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([
+        makeResponse(
+          recognizedReply(
+            { name: '鴕鳥肉', subtype: null },
+            { confidence: 'medium', note: '' },
           ),
-        ],
-        usda: [
-          jsonResponse({ foods: [salmonFood, noEnergyFoundation, foundation] }),
-        ],
-      }),
-    );
-    const res = await lookup('雞胸肉');
-    expect(res.status).toBe(200);
-    expect(res.body.draft).toMatchObject({
-      subtype: null,
-      calories: 121,
-      protein: 22.6,
-      fat: 2.6,
-      ca: 0,
-      p: 0,
-      source: 'usda',
-      sourceRef: 'FDC 2346393',
-    });
-  });
-
-  it('falls back to a Gemini estimate when USDA finds nothing', async () => {
-    const fetchMock = await setup(
-      { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
-      makeFetch({
-        gemini: [
-          geminiReply(
-            classification({ nameZh: '鴕鳥肉', nameEn: 'ostrich meat' }),
+        ),
+        makeResponse(
+          recognizedReply(
+            { name: '鹿肉', subtype: null },
+            { confidence: 'low' },
           ),
-          geminiReply({
-            calories: 116.6,
-            protein: 21.94,
-            fat: 2.65,
-            ca: 6.4,
-            p: 211.5,
-          }),
-        ],
-        usda: [jsonResponse({ foods: [] })],
-      }),
-    );
-    const res = await lookup('鴕鳥肉');
-    expect(res.status).toBe(200);
-    expect(res.body.confidence).toBe('low');
-    expect(res.body.draft).toMatchObject({
-      name: '鴕鳥肉',
-      nameEn: 'ostrich meat',
-      calories: 117,
-      protein: 21.9,
-      fat: 2.7,
-      ca: 6,
-      p: 212,
-      source: 'ai',
-      sourceRef: 'gemini-2.5-flash',
+        ),
+      ]),
     });
-    expect(callsTo(fetchMock, 'generativelanguage')).toHaveLength(2);
+    const a = await lookup('鴕鳥肉');
+    expect(a.status).toBe(200);
+    expect(a.body.confidence).toBe('medium');
+    expect(a.body.note).toBe('');
+    const b = await lookup('鹿肉');
+    expect(b.body.confidence).toBe('low');
   });
 
-  it('USDA key only uses the query as search term and default classification', async () => {
-    const fetchMock = await setup(
-      { usdaApiKey: USDA_KEY },
-      makeFetch({ usda: [jsonResponse({ foods: [salmonFood] })] }),
-    );
-    const res = await lookup('Salmon   Raw');
-    expect(res.status).toBe(200);
-    expect(res.body.draft).toMatchObject({
-      name: 'Salmon Raw',
-      nameEn: 'Salmon Raw',
-      type: 'veg',
-      recipeRole: 'plant',
-      subtype: null,
-      safety: 'caution',
-      warning: '未經 AI 判定安全性,請自行確認',
-      source: 'usda',
+  it('records ai_usage with purpose food_lookup', async () => {
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([makeResponse(recognizedReply())]),
     });
-    expect(res.body.confidence).toBe('high');
-    const [, init] = callsTo(fetchMock, 'api.nal.usda.gov')[0];
-    expect(JSON.parse(init.body).query).toBe('Salmon Raw');
-    expect(callsTo(fetchMock, 'generativelanguage')).toHaveLength(0);
+    await lookup('鮭魚');
+    const rows = usageRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      purpose: 'food_lookup',
+      verdict: 'recognized',
+      model: 'claude-opus-5-5',
+      input_tokens: 2000,
+      output_tokens: 500,
+    });
+    // 2000 × $4 + 500 × $20 per MTok = 0.008 + 0.01
+    expect(rows[0].cost_usd).toBeCloseTo(0.018, 10);
   });
 
-  it('serves a second identical lookup from cache without calling fetch', async () => {
-    const fetchMock = await setup(
-      { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
-      makeFetch({
-        gemini: [geminiReply(classification())],
-        usda: [jsonResponse({ foods: [salmonFood] })],
-      }),
-    );
-    const first = await lookup('鮭魚');
+  it('returns 422 food_unrecognized and caches it', async () => {
+    const reason = '無法辨識「qwzx」是什麼食材,請輸入正確的食材名稱。';
+    const { create } = await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([makeResponse(unrecognizedReply(reason))]),
+    });
+    const first = await lookup('QW zx');
+    expect(first.status).toBe(422);
+    expect(first.body).toEqual({ error: 'food_unrecognized', message: reason });
+    expect(usageRows()[0]).toMatchObject({
+      purpose: 'food_lookup',
+      verdict: 'unrecognized',
+    });
+
+    // 快取 key:小寫、去空白
+    const row = cacheRow('qwzx');
+    expect(row.source).toBe('unrecognized');
+    expect(JSON.parse(row.response_json)).toEqual({
+      v: 2,
+      kind: 'unrecognized',
+      message: reason,
+    });
+
+    const second = await lookup(' qwZX ');
+    expect(second.status).toBe(422);
+    expect(second.body).toEqual(first.body);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(usageRows()).toHaveLength(1);
+  });
+
+  it('uses a default message when the unrecognized reason is empty', async () => {
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([makeResponse(unrecognizedReply('  '))]),
+    });
+    const res = await lookup('那個');
+    expect(res.status).toBe(422);
+    expect(res.body.message).toContain('「那個」');
+  });
+
+  it('serves a cache hit without calling the client (even with no key)', async () => {
+    const { create } = await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([makeResponse(recognizedReply())]),
+    });
+    const first = await lookup('Atlantic Salmon');
     expect(first.body.cached).toBe(false);
-    const callsAfterFirst = fetchMock.mock.calls.length;
 
-    const second = await lookup(' 鮭魚 ');
+    const second = await lookup('atlantic   salmon');
     expect(second.status).toBe(200);
     expect(second.body.cached).toBe(true);
     expect(second.body.draft).toEqual(first.body.draft);
-    expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+    expect(second.body.confidence).toBe('high');
+    expect(second.body.note).toBe(first.body.note);
+    expect(create).toHaveBeenCalledTimes(1);
 
-    const row = app.db
-      .prepare('SELECT * FROM lookup_cache WHERE query = ?')
-      .get('鮭魚');
-    expect(row.source).toBe('usda');
+    app.config.ai.apiKey = null;
+    const third = await lookup('ATLANTICSALMON');
+    expect(third.status).toBe(200);
+    expect(third.body.cached).toBe(true);
+
+    const row = cacheRow('atlanticsalmon');
+    expect(row.source).toBe('ai');
     expect(row.fetched_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(usageRows()).toHaveLength(1);
   });
 
-  it('maps a Gemini HTTP 500 to 502 lookup_failed without leaking keys', async () => {
-    await setup(
-      { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
-      makeFetch({ gemini: [jsonResponse({ error: 'boom' }, 500)] }),
-    );
+  it('ignores an old-format (Gemini / USDA) cache entry and overwrites it', async () => {
+    const { create } = await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([makeResponse(recognizedReply())]),
+    });
+    app.db
+      .prepare(
+        `INSERT INTO lookup_cache (query, response_json, source, fetched_at)
+         VALUES ('鮭魚', ?, 'usda', '2026-01-01T00:00:00.000Z')`,
+      )
+      .run(
+        JSON.stringify({
+          draft: { name: '鮭魚', source: 'usda' },
+          confidence: 'high',
+          cached: false,
+        }),
+      );
+    const res = await lookup('鮭魚');
+    expect(res.status).toBe(200);
+    expect(res.body.cached).toBe(false);
+    expect(res.body.draft.source).toBe('ai');
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(cacheRow('鮭魚').source).toBe('ai');
+  });
+
+  it('returns 429 ai_quota_exceeded sharing the quota with AI review', async () => {
+    const { create } = await setup({ ai: { apiKey: API_KEY, dailyUsd: 0.5 } });
+    // AI 復盤(purpose NULL = 舊資料)的花費也算進同一份額度
+    app.db
+      .prepare(
+        `INSERT INTO ai_usage (created_at, model, cost_usd, verdict)
+         VALUES (?, 'claude-opus-5-5', 0.5, 'pass')`,
+      )
+      .run(new Date().toISOString());
+    const res = await lookup('鮭魚');
+    expect(res.status).toBe(429);
+    expect(res.body.error).toBe('ai_quota_exceeded');
+    expect(res.body.message).toContain('今日');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('returns 502 ai_failed when the client throws (no usage, no cache)', async () => {
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([new Error('connection reset')]),
+    });
     const res = await lookup('鮭魚');
     expect(res.status).toBe(502);
-    expect(res.body.error).toBe('lookup_failed');
-    expect(JSON.stringify(res.body)).not.toContain(GEMINI_KEY);
+    expect(res.body.error).toBe('ai_failed');
+    expect(JSON.stringify(res.body)).not.toContain(API_KEY);
+    expect(usageRows()).toHaveLength(0);
+    expect(cacheRow('鮭魚')).toBeUndefined();
   });
 
-  it('maps a timeout to 502 lookup_failed', async () => {
-    await setup(
-      { usdaApiKey: USDA_KEY },
-      makeFetch({
-        usda: [
-          () => {
-            throw new DOMException(
-              'The operation was aborted due to timeout',
-              'TimeoutError',
-            );
-          },
-        ],
+  it('returns 502 ai_failed for refusal / max_tokens / schema-invalid responses', async () => {
+    const { calories, ...missingCalories } = salmonDraft();
+    expect(calories).toBeGreaterThan(0);
+    const bad = [
+      makeResponse(recognizedReply(), {
+        stop_reason: 'refusal',
+        stop_details: { type: 'refusal', category: null, explanation: null },
+        content: [],
       }),
-    );
-    const res = await lookup('salmon');
-    expect(res.status).toBe(502);
-    expect(res.body.error).toBe('lookup_failed');
-    expect(JSON.stringify(res.body)).not.toContain(USDA_KEY);
+      makeResponse(recognizedReply(), { stop_reason: 'max_tokens' }),
+      makeResponse('not json'),
+      makeResponse({ ...recognizedReply(), draft: missingCalories }),
+      makeResponse(recognizedReply({ type: 'meat' })),
+      makeResponse(recognizedReply({}, { confidence: 'sure' })),
+      makeResponse(recognizedReply({ name: '' })),
+      makeResponse(recognizedReply({ name: '字'.repeat(41) })),
+      makeResponse(recognizedReply({ description: '字'.repeat(61) })),
+    ];
+    await setup({ ai: { apiKey: API_KEY }, client: makeClient(bad) });
+    // 限流 10 次/分:9 筆在上限內
+    for (let i = 0; i < bad.length; i += 1) {
+      const res = await lookup(`食材${i}`);
+      expect(res.status).toBe(502);
+      expect(res.body.error).toBe('ai_failed');
+    }
+    const rows = usageRows();
+    expect(rows).toHaveLength(bad.length);
+    expect(rows.every((r) => r.purpose === 'food_lookup')).toBe(true);
+    expect(rows.every((r) => r.verdict === null)).toBe(true);
+    expect(
+      app.db.prepare('SELECT COUNT(*) AS n FROM lookup_cache').get().n,
+    ).toBe(0);
   });
 
-  it('returns 404 lookup_not_found when USDA-only search finds nothing', async () => {
-    await setup(
-      { usdaApiKey: USDA_KEY },
-      makeFetch({ usda: [jsonResponse({ foods: [] })] }),
-    );
-    const res = await lookup('unobtainium');
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe('lookup_not_found');
+  it('returns 502 ai_failed for out-of-range nutrients', async () => {
+    const bad = [
+      { calories: 0 },
+      { calories: 0.01 }, // 四捨五入後為 0
+      { calories: 950 },
+      { protein: -1 },
+      { fat: 120 },
+      { ca: 50000 },
+      { p: 25000 },
+      { protein: '20' },
+      { safety: 'caution', warning: null }, // caution 必須有提醒
+    ];
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient(bad.map((o) => makeResponse(recognizedReply(o)))),
+    });
+    for (let i = 0; i < bad.length; i += 1) {
+      const res = await lookup(`越界${i}`);
+      expect(res.status).toBe(502);
+      expect(res.body.error).toBe('ai_failed');
+    }
   });
 
-  it('forces recipeRole excluded for foods toxic to dogs', async () => {
-    await setup(
-      { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
-      makeFetch({
-        gemini: [
-          geminiReply(
-            classification({
-              nameZh: '葡萄',
-              nameEn: 'grapes raw',
-              type: 'fruit',
-              recipeRole: 'plant',
-              safety: 'toxic',
-              warning: '可能導致急性腎衰竭',
-            }),
-          ),
-        ],
-        usda: [jsonResponse({ foods: [salmonFood] })],
-      }),
-    );
-    const res = await lookup('葡萄');
-    expect(res.body.draft.safety).toBe('toxic');
-    expect(res.body.draft.recipeRole).toBe('excluded');
+  it('corrects inconsistent type / recipeRole / safety and logs a warning', async () => {
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([
+        makeResponse(
+          recognizedReply({
+            name: '葡萄',
+            nameEn: 'Grapes',
+            type: 'fruit',
+            recipeRole: 'plant',
+            subtype: 'organ',
+            safety: 'toxic',
+            warning: '致死風險:急性腎衰竭',
+            calories: 69,
+          }),
+        ),
+        makeResponse(
+          recognizedReply({
+            name: '雞腿肉',
+            subtype: null,
+            recipeRole: 'excluded',
+            safety: 'safe',
+            warning: '去皮',
+          }),
+        ),
+      ]),
+    });
+    const warn = vi.spyOn(app.log, 'warn');
+    const grape = await lookup('葡萄');
+    expect(grape.status).toBe(200);
+    expect(grape.body.draft).toMatchObject({
+      safety: 'toxic',
+      recipeRole: 'excluded',
+      subtype: null,
+      warning: '致死風險:急性腎衰竭',
+    });
+    const chicken = await lookup('雞腿肉');
+    expect(chicken.body.draft).toMatchObject({
+      safety: 'safe',
+      recipeRole: 'protein',
+      warning: null,
+    });
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('normalizes empty nameEn / sourceRef to null', async () => {
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([
+        makeResponse(recognizedReply({ nameEn: '  ', sourceRef: '' })),
+      ]),
+    });
+    const res = await lookup('鮭魚');
+    expect(res.body.draft.nameEn).toBeNull();
+    expect(res.body.draft.sourceRef).toBeNull();
   });
 
   it('does not create a food row', async () => {
-    await setup(
-      { geminiApiKey: GEMINI_KEY, usdaApiKey: USDA_KEY },
-      makeFetch({
-        gemini: [geminiReply(classification())],
-        usda: [jsonResponse({ foods: [salmonFood] })],
-      }),
-    );
+    await setup({
+      ai: { apiKey: API_KEY },
+      client: makeClient([makeResponse(recognizedReply())]),
+    });
     const count = () =>
       app.db.prepare('SELECT COUNT(*) AS n FROM foods').get().n;
     const before = count();

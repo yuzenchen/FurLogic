@@ -10,7 +10,7 @@ FurLogic 幫你**規劃毛孩鮮食的份量**:設定各類別(蛋白質 / 蔬�
 
 - **比例計算**:各食材重量占比 % → 依單餐目標反推每餐總重 → 每餐各項克數、共買量、每餐營養與補充品建議
 - **食材庫**:食材資料庫與安全等級,可自訂食材
-- **線上熱量查詢**:透過 USDA / Gemini 查詢食材熱量(需 API 金鑰)
+- **線上營養查詢**:輸入食材名稱,由 Claude 依食材庫格式回填分類、安全性與每 100 g 營養(需 Anthropic API 金鑰;無法確定是哪種食材時會拒答)
 - **毛孩設定**:體重、結紮、活動量、每日餐數
 
 ## 架構
@@ -77,22 +77,19 @@ docker buildx build --platform linux/arm64 -f Dockerfile.api .
 | `DATA_DIR`        | SQLite 資料目錄                          | `./data`(Docker:`/data`)                      |
 | `ALLOWED_ORIGINS` | CORS 允許的前端來源(逗號分隔)            | `http://localhost:3000,http://localhost:8080` |
 | `TZ`              | 時區                                     | `Asia/Taipei`                                 |
-| `GEMINI_API_KEY`  | Gemini API 金鑰                          | 空白                                          |
-| `USDA_API_KEY`    | USDA FoodData Central 金鑰               | 空白                                          |
-| `GEMINI_MODEL`    | Gemini 模型名稱                          | `gemini-2.5-flash`                            |
-| `ANTHROPIC_API_KEY` | Anthropic API 金鑰(AI 復盤用,只放 .env) | 空白                                        |
-| `AI_MODEL`        | AI 復盤使用的 Claude 模型                | `claude-opus-5-5`                             |
-| `AI_DAILY_USD`    | AI 復盤每日花費上限(USD,台北時間日界)  | `1`                                           |
-| `AI_MONTHLY_USD`  | AI 復盤每月花費上限(USD,台北時間月界)  | `10`                                          |
+| `ANTHROPIC_API_KEY` | Anthropic API 金鑰(AI 復盤 + 線上查詢,只放 .env) | 空白                               |
+| `AI_MODEL`        | AI 復盤 / 線上查詢使用的 Claude 模型     | `claude-opus-5-5`                             |
+| `AI_DAILY_USD`    | AI 每日花費上限(USD,台北時間日界,共用)| `1`                                           |
+| `AI_MONTHLY_USD`  | AI 每月花費上限(USD,台北時間月界,共用)| `10`                                          |
 | `VITE_API_URL`    | 前端 build 時使用的 API 位址(build-time) | 空白 = 同源 `/api`                            |
 
-未設定 `GEMINI_API_KEY` / `USDA_API_KEY` 時,線上查詢會回傳 503,App 會退回手動輸入。
+AI 復盤(`POST /api/ai/review`,由 Claude 獨立重算比例計算結果並檢查營養)與線上營養查詢
+(`POST /api/foods/lookup`,由 Claude 依食材庫格式回填草稿;看不懂或無法確定是哪種食材時回 422)
+都需要設定 `ANTHROPIC_API_KEY`;未設定時回傳 503,線上查詢會退回手動輸入。
+每次呼叫的 token 用量與成本記錄在 `ai_usage` 表(`purpose` 欄區分 `review` / `food_lookup`),
+兩個功能共用日 / 月額度,用完回傳 429。線上查詢結果(含 422)會快取在 `lookup_cache`,同一名稱不會重複花費。
 
-AI 復盤(`POST /api/ai/review`,由 Claude 獨立重算比例計算結果並檢查營養)需要設定 `ANTHROPIC_API_KEY`;
-未設定時回傳 503。每次呼叫的 token 用量與成本記錄在 `ai_usage` 表,日 / 月額度用完回傳 429。
-
-- USDA 金鑰申請:https://fdc.nal.usda.gov/api-key-signup
-- Gemini 金鑰申請:https://aistudio.google.com/apikey
+- Anthropic 金鑰申請:https://console.anthropic.com/
 
 ## 舊版資料匯入
 
@@ -114,7 +111,7 @@ docker compose -f docker-compose.pi.yml up -d --build
 
 家用網路用瀏覽器開 `http://<Pi 的 IP>:8080` 即可(port 避開了綠葉專案的 80/443/3000/3001/3002/3100 與 jojo 的 8088)。
 
-- `.env` 的 `GEMINI_API_KEY` / `USDA_API_KEY` 可留空:線上查詢會回 503,App 退回手動輸入。
+- `.env` 的 `ANTHROPIC_API_KEY` 可留空:AI 復盤與線上查詢會回 503,App 退回手動輸入。
 - **更新**:`git pull` 後重跑同一行 `docker compose -f docker-compose.pi.yml up -d --build`。
 - **改 `.env` 後**:`docker compose -f docker-compose.pi.yml up -d --force-recreate api`(env_file 只在建立容器時讀取)。
 - **資料**:落在 Pi 上的 `./data/furlogic.db`(SQLite,bind mount `./data:/data`,不用 named volume)。**備份＝複製 `data/` 資料夾**(含 `furlogic.db-wal` / `-shm`;建議先 `docker compose -f docker-compose.pi.yml stop api` 再複製)。

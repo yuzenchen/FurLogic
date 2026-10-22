@@ -5,6 +5,7 @@ import {
   getAiStatus,
   getPets,
   listFoods,
+  lookupFood,
   reviewCalc,
   updatePet,
 } from './client';
@@ -103,6 +104,36 @@ describe('ai api', () => {
   ])('surfaces %i %s as ApiError', async (status, code) => {
     mockFetch(async () => jsonResponse(status, { error: code, message: 'x' }));
     const err = await reviewCalc({}).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status, code, message: 'x' });
+  });
+});
+
+describe('food lookup api', () => {
+  it('POSTs { query } to /api/foods/lookup', async () => {
+    const body = {
+      draft: { name: '冬瓜' },
+      confidence: 'medium',
+      note: '',
+      cached: false,
+    };
+    const fetchFn = mockFetch(async () => jsonResponse(200, body));
+    await expect(lookupFood('冬瓜')).resolves.toEqual(body);
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('/api/foods/lookup');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ query: '冬瓜' });
+  });
+
+  it.each([
+    [422, 'food_unrecognized'],
+    [503, 'ai_unavailable'],
+    [429, 'ai_quota_exceeded'],
+    [429, 'rate_limited'],
+    [502, 'ai_failed'],
+  ])('surfaces %i %s as ApiError', async (status, code) => {
+    mockFetch(async () => jsonResponse(status, { error: code, message: 'x' }));
+    const err = await lookupFood('q').catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status, code, message: 'x' });
   });

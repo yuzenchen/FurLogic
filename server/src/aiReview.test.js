@@ -17,9 +17,6 @@ const baseConfig = {
   host: '127.0.0.1',
   dataDir: '.',
   allowedOrigins: ['http://localhost:3000'],
-  geminiApiKey: null,
-  usdaApiKey: null,
-  geminiModel: 'gemini-2.5-flash',
   ai: { apiKey: null, model: 'claude-opus-5-5', dailyUsd: 1, monthlyUsd: 10 },
 };
 
@@ -266,6 +263,7 @@ describe('AI 復盤 API', () => {
       cache_read_tokens: 0,
       cache_write_tokens: 0,
       verdict: 'warn',
+      purpose: 'review',
     });
     expect(rows[0].cost_usd).toBeCloseTo(0.044, 10);
   });

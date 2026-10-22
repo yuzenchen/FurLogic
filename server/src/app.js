@@ -16,7 +16,7 @@ const API_ROUTES = [
   healthRoutes,
   petRoutes,
   foodRoutes,
-  lookupRoutes, // POST /api/foods/lookup(限流 10 req/min/IP)
+  lookupRoutes, // POST /api/foods/lookup(Claude;限流 10 req/min/IP)
   importRoutes,
   aiRoutes, // GET /api/ai/status、POST /api/ai/review(限流 5 req/min/IP)
 ];
@@ -58,16 +58,14 @@ const toErrorResponse = (err) => {
 
 /**
  * 建立 Fastify app(尚未 listen)。
- * fetch / createAnthropicClient 可注入(測試用,避免打外部 API)。
+ * createAnthropicClient 可注入(測試用,避免打外部 API)。
  * @param {{ dbPath?: string, config?: object, logger?: boolean|object,
- *           fetch?: typeof fetch,
  *           createAnthropicClient?: (apiKey: string) => object }} opts
  */
 export async function buildApp({
   dbPath = ':memory:',
   config = loadConfig(),
   logger = false,
-  fetch = globalThis.fetch,
   createAnthropicClient,
 } = {}) {
   const app = Fastify({
@@ -121,7 +119,7 @@ export async function buildApp({
   await app.register(
     async (api) => {
       for (const routes of API_ROUTES) {
-        await api.register(routes, { fetch, createAnthropicClient });
+        await api.register(routes, { createAnthropicClient });
       }
     },
     { prefix: '/api' },

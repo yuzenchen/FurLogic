@@ -25,9 +25,6 @@ const config = {
   host: '127.0.0.1',
   dataDir: '.',
   allowedOrigins: ['http://localhost:3000'],
-  geminiApiKey: null,
-  usdaApiKey: null,
-  geminiModel: 'gemini-2.5-flash',
 };
 
 const customFood = (overrides = {}) => ({
@@ -410,7 +407,12 @@ describe('file-backed database', () => {
     const versions = second.db
       .prepare('SELECT version FROM schema_migrations')
       .all();
-    expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    expect(versions).toEqual([
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+    ]);
     await second.close();
   });
 
@@ -444,7 +446,12 @@ describe('file-backed database', () => {
     const versions = app.db
       .prepare('SELECT version FROM schema_migrations')
       .all();
-    expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    expect(versions).toEqual([
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+    ]);
     const foods = (await app.inject('/api/foods')).json();
     expect(foods).toHaveLength(45);
     const byId = new Map(foods.map((f) => [f.id, f]));
