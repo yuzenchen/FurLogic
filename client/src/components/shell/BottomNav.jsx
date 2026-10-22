@@ -22,7 +22,7 @@ function NavItem({ icon: Icon, label, selected, onClick }) {
   );
 }
 
-/** 底部導覽:食材 / 批次(突起主按鈕)/ 毛孩 */
+/** 底部導覽:食材 / 計算(突起主按鈕)/ 毛孩 */
 export default function BottomNav() {
   const { tab, setTab, openSettings } = useNav();
   const batchSelected = tab === 'batch';
@@ -57,7 +57,7 @@ export default function BottomNav() {
               batchSelected ? 'text-orange-700' : 'text-stone-600',
             )}
           >
-            批次
+            計算
           </span>
         </button>
         <NavItem

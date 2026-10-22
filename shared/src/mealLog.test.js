@@ -33,7 +33,8 @@ describe('index re-exports', () => {
     expect(typeof shared.computeMacros).toBe('function');
     expect(typeof shared.buildSupplements).toBe('function');
     expect(typeof shared.analyzeMeal).toBe('function');
-    expect(typeof shared.planGapFill).toBe('function');
+    expect(typeof shared.planByRatio).toBe('function');
+    expect(shared.planGapFill).toBeUndefined();
     expect(shared.planBatch).toBeUndefined();
     expect(shared.toDateKey).toBeUndefined();
     expect(shared.MEAL_LABELS).toBeUndefined();

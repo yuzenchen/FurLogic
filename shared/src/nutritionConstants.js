@@ -49,5 +49,3 @@ export const MEAL_CAPS = {
   organ: { grams: 12, label: '內臟' }, // food.subtype === 'organ'
   fatty_fish: { grams: 65, label: '高脂魚' }, // food.subtype === 'fatty_fish'
 };
-// 主力瘦肉克數的取位方式:缺口 ÷ 係數後無條件進位到整數 g
-export const MAIN_MEAT_ROUNDING = 'ceil';

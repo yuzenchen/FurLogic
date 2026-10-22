@@ -9,7 +9,7 @@ import useTwoStepConfirm from './useTwoStepConfirm';
 const fmt = (v) => (Number.isFinite(v) ? v : '–');
 
 /**
- * 食材卡片。onAdd:加入批次;onEdit / onDelete 只對非內建食材顯示。
+ * 食材卡片。onAdd:加入計算;onEdit / onDelete 只對非內建食材顯示。
  * onDelete 回傳 Promise,失敗時在卡片內顯示錯誤。
  */
 export default function FoodCard({ food, onAdd, onEdit, onDelete }) {
@@ -83,7 +83,7 @@ export default function FoodCard({ food, onAdd, onEdit, onDelete }) {
           </Button>
         ) : (
           <Button variant="secondary" icon={Plus} onClick={() => onAdd?.(food)}>
-            加入批次
+            加入計算
           </Button>
         )}
         {isCustom && (

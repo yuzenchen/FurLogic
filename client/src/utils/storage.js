@@ -1,9 +1,9 @@
 /**
  * localStorage 小工具。所有存取都包 try/catch(無痕模式 / 停用儲存時不會壞掉)。
- * 毛孩資料、食材都存在 API,這裡只放 UI 偏好、批次草稿與舊版資料遷移。
+ * 毛孩資料、食材都存在 API,這裡只放 UI 偏好、計算頁草稿與舊版資料遷移。
  */
-import { ITEM_ROLES } from '@furlogic/shared';
-import { toInputMode } from './batchDraft';
+import { RATIO_CATEGORIES } from '@furlogic/shared';
+import { batchDraftReducer, presentCategories } from './batchDraft';
 
 const KEYS = {
   ACTIVE_TAB: 'furlogic_active_tab',
@@ -59,7 +59,7 @@ const isPlainObject = (v) =>
 // === 目前分頁 ===
 export const TABS = ['batch', 'foods'];
 export const DEFAULT_TAB = 'batch';
-/** 舊分頁值 → 新分頁(today/history/log 與更舊的 home/kitchen 都併入批次) */
+/** 舊分頁值 → 新分頁(today/history/log 與更舊的 home/kitchen 都併入計算頁) */
 const LEGACY_TAB_MAP = {
   today: 'batch',
   history: 'batch',
@@ -89,39 +89,55 @@ export const saveActiveTab = (tab) => {
   if (TABS.includes(tab)) writeRaw(KEYS.ACTIVE_TAB, tab);
 };
 
-// === 批次草稿 ===
+// === 計算頁草稿 ===
+const isValidPct = (v) => Number.isFinite(v) && v >= 0 && v <= 100;
+
+const isValidFood = (food) =>
+  isPlainObject(food) && typeof food.name === 'string';
+
+/** 現行項目:{ food, pct } */
+const isValidRatioItem = (item) =>
+  isPlainObject(item) && isValidFood(item.food) && isValidPct(item.pct);
+
 const isValidGrams = (g) => Number.isFinite(g) && g >= 0;
 
-/** 草稿項目:batchGrams(現行)或 gramsPerMeal(舊形狀,讀取時換算)其一有效即可 */
-const isValidDraftItem = (item) =>
+/**
+ * 上一版(缺口填補)項目:{ food, role, batchGrams | gramsPerMeal };
+ * 只保留食材清單,比例依序 addFood 重建。
+ */
+const isLegacyGapItem = (item) =>
   isPlainObject(item) &&
-  isPlainObject(item.food) &&
-  typeof item.food.name === 'string' &&
-  ITEM_ROLES.includes(item.role) &&
+  isValidFood(item.food) &&
+  typeof item.role === 'string' &&
   (item.batchGrams !== undefined
     ? isValidGrams(item.batchGrams)
     : isValidGrams(item.gramsPerMeal));
 
-const round1 = (n) => Math.round(n * 10) / 10;
-
-/** 舊形狀 { gramsPerMeal } → { batchGrams = round1(gramsPerMeal × mealsCount) } */
-const normalizeDraftItem = (item, mealsCount) => {
-  const { gramsPerMeal, ...rest } = item;
-  if (item.batchGrams !== undefined) return rest;
-  return { ...rest, batchGrams: round1(gramsPerMeal * mealsCount) };
-};
+const isValidCategoryPct = (categoryPct, items) =>
+  isPlainObject(categoryPct) &&
+  Object.entries(categoryPct).every(
+    ([cat, v]) => RATIO_CATEGORIES.includes(cat) && isValidPct(v),
+  ) &&
+  presentCategories(items).every((cat) => categoryPct[cat] !== undefined);
 
 const isValidMealsCount = (n) => Number.isInteger(n) && n >= 1 && n <= 60;
 
 const isValidTargetOverride = (v) =>
   v === null || (Number.isFinite(v) && v > 0);
 
+/** 依序 addFood 重建 categoryPct 與 pct */
+const rebuildFromFoods = (base, foods) =>
+  foods.reduce(
+    (state, food) => batchDraftReducer(state, { type: 'addFood', food }),
+    base,
+  );
+
 /**
- * 讀批次草稿;順便清掉已停用的單餐草稿 key。格式不符回 null。
- * 相容舊形狀:item 只有 gramsPerMeal(無 batchGrams)→ batchGrams = round1(gramsPerMeal × mealsCount)。
+ * 讀計算頁草稿;順便清掉已停用的單餐草稿 key。格式不符回 null。
+ * 相容上一版(缺口填補)形狀:items 有 role / batchGrams / gramsPerMeal →
+ * 保留食材清單,依序 addFood 重建 categoryPct 與 pct(有毒 / 重複食材會被略過)。
  * 更舊的形狀(servings / grams / vegWeightPct)不遷移,直接視為無效。
- * inputMode 缺少或非法 → 'batch'。
- * @returns {{ mealsCount: number, mealTargetOverride: number|null, inputMode: 'batch'|'perMeal', items: Array<{ food: object, role: string, batchGrams: number }> } | null}
+ * @returns {{ mealsCount: number, mealTargetOverride: number|null, categoryPct: Record<string, number>, items: Array<{ food: object, pct: number }> } | null}
  */
 export const getBatchDraft = () => {
   removeRaw(KEYS.LEGACY_SINGLE_DRAFT);
@@ -130,19 +146,33 @@ export const getBatchDraft = () => {
     !isPlainObject(draft) ||
     !isValidMealsCount(draft.mealsCount) ||
     !isValidTargetOverride(draft.mealTargetOverride ?? null) ||
-    !Array.isArray(draft.items) ||
-    !draft.items.every(isValidDraftItem)
+    !Array.isArray(draft.items)
   ) {
     return null;
   }
-  return {
+  const base = {
     mealsCount: draft.mealsCount,
     mealTargetOverride: draft.mealTargetOverride ?? null,
-    inputMode: toInputMode(draft.inputMode),
-    items: draft.items.map((item) =>
-      normalizeDraftItem(item, draft.mealsCount),
-    ),
+    categoryPct: {},
+    items: [],
   };
+  if (
+    draft.items.every(isValidRatioItem) &&
+    isValidCategoryPct(draft.categoryPct ?? {}, draft.items)
+  ) {
+    return {
+      ...base,
+      categoryPct: { ...(draft.categoryPct ?? {}) },
+      items: draft.items.map(({ food, pct }) => ({ food, pct })),
+    };
+  }
+  if (draft.items.length > 0 && draft.items.every(isLegacyGapItem)) {
+    return rebuildFromFoods(
+      base,
+      draft.items.map((item) => item.food),
+    );
+  }
+  return null;
 };
 
 export const saveBatchDraft = (draft) => {

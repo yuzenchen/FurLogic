@@ -144,12 +144,12 @@ const buildPatch = (v, original) => {
 };
 
 /**
- * 新增 / 編輯食材的抽屜(批次頁與食材頁共用)。父元件在需要時才掛載。
+ * 新增 / 編輯食材的抽屜(計算頁與食材頁共用)。父元件在需要時才掛載。
  * @param {'manual'|'lookup'|'edit'} mode
  * @param {object} initial 預填資料(lookup draft / 既有食材 / { name })
  * @param {'high'|'low'} [confidence] lookup 信心度
  * @param {string} [notice] 表單上方提示(查詢失敗等)
- * @param {'batch'|'foods'} context batch:儲存後加入批次(有毒則只存入食材庫)
+ * @param {'batch'|'foods'} context batch:儲存後加入計算(有毒則只存入食材庫)
  * @param {(food: object) => void} onSaved 儲存成功或選擇「改用現有的」時呼叫
  */
 export default function FoodFormSheet({

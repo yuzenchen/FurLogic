@@ -12,8 +12,8 @@ import { BottomSheet, Button, ErrorState, FOCUS_RING, cx } from '../ui';
  * 「加入食材」抽屜:搜尋資料庫 → 勾選多項 → 底部「加入 N 項」一次加入;
  * 找不到時可線上查詢或手動新增(儲存後連同已勾選項一起加入並關閉)。
  * 新增食材的表單會暫時取代這個抽屜,取消後回到搜尋。父元件需要時才掛載。
- * @param {Set<number>} addedIds 已在批次草稿中的食材 id
- * @param {(food: object) => void} onAdd 加入批次草稿
+ * @param {Set<number>} addedIds 已在計算頁草稿中的食材 id
+ * @param {(food: object) => void} onAdd 加入計算頁草稿
  */
 export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
   const [query, setQuery] = useState('');
@@ -44,7 +44,7 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
 
   const clearSelected = () => setSelected(new Map());
 
-  // 依勾選順序逐一加入(reducer 會套用「第一個肉類成主力」規則);extra 為表單剛存好的食材
+  // 依勾選順序逐一加入(reducer 會依類別重新分配比例);extra 為表單剛存好的食材
   const commit = (extra) => {
     for (const food of selected.values()) onAdd(food);
     if (extra && !selected.has(extra.id)) onAdd(extra);
@@ -74,7 +74,7 @@ export default function FoodSearchSheet({ onClose, addedIds, onAdd }) {
   const handleSaved = (food) => {
     if (food.safety === 'toxic') {
       setForm(null);
-      setMessage(`已將「${food.name}」存入食材庫(對狗有毒,未加入批次)`);
+      setMessage(`已將「${food.name}」存入食材庫(對狗有毒,未加入計算)`);
       refetch();
       return;
     }

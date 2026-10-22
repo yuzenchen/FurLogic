@@ -60,34 +60,29 @@ describe('active tab', () => {
 });
 
 describe('batch draft', () => {
-  it('validates shape on read', () => {
+  it('validates the ratio shape on read', () => {
     const draft = {
       mealsCount: 4,
       mealTargetOverride: 450,
-      inputMode: 'perMeal',
+      categoryPct: { protein: 60, produce: 40 },
       items: [
-        { food: { id: 1, name: '雞胸' }, role: 'main', batchGrams: 0 },
-        { food: { id: 3, name: '南瓜' }, role: 'fixed', batchGrams: 200 },
+        { food: { id: 1, name: '雞胸', type: 'protein' }, pct: 60 },
+        { food: { id: 3, name: '南瓜', type: 'veg' }, pct: 40 },
       ],
     };
     saveBatchDraft(draft);
     expect(getBatchDraft()).toEqual(draft);
     saveBatchDraft({ ...draft, mealTargetOverride: null });
     expect(getBatchDraft().mealTargetOverride).toBeNull();
-    // 缺 mealTargetOverride 視為 null;缺 inputMode 視為 batch
+    // 缺 mealTargetOverride 視為 null;空清單缺 categoryPct 視為 {}
     storage.setItem('furlogic_batch_draft', '{"mealsCount":2,"items":[]}');
     expect(getBatchDraft()).toEqual({
       mealsCount: 2,
       mealTargetOverride: null,
-      inputMode: 'batch',
+      categoryPct: {},
       items: [],
     });
-    // 非法 inputMode → batch(不視為整份無效)
-    storage.setItem(
-      'furlogic_batch_draft',
-      '{"mealsCount":2,"inputMode":"weird","items":[]}',
-    );
-    expect(getBatchDraft().inputMode).toBe('batch');
+    const food = '{"name":"a","type":"protein"}';
     const bad = [
       '{"items":[]}', // 缺 mealsCount
       '{"mealsCount":0,"items":[]}',
@@ -96,9 +91,15 @@ describe('batch draft', () => {
       '{"mealsCount":2,"mealTargetOverride":0,"items":[]}',
       '{"mealsCount":2,"mealTargetOverride":"450","items":[]}',
       '{"mealsCount":2,"items":[{}]}',
-      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"x","batchGrams":1}]}',
+      `{"mealsCount":2,"categoryPct":{"protein":100},"items":[{"food":${food},"pct":-1}]}`,
+      `{"mealsCount":2,"categoryPct":{"protein":100},"items":[{"food":${food},"pct":101}]}`,
+      `{"mealsCount":2,"categoryPct":{"protein":100},"items":[{"food":${food},"pct":"5"}]}`,
+      // 有食材但缺該類別 %
+      `{"mealsCount":2,"categoryPct":{},"items":[{"food":${food},"pct":100}]}`,
+      `{"mealsCount":2,"categoryPct":{"weird":10},"items":[]}`,
+      `{"mealsCount":2,"categoryPct":{"protein":120},"items":[{"food":${food},"pct":100}]}`,
+      // 上一版形狀但克數非法
       '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed","batchGrams":-1}]}',
-      '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed","batchGrams":"5"}]}',
       '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed","gramsPerMeal":-1}]}',
       '{"mealsCount":2,"items":[{"food":{"name":"a"},"role":"fixed"}]}',
       'not json',
@@ -109,19 +110,32 @@ describe('batch draft', () => {
     }
   });
 
-  it('migrates the previous gramsPerMeal shape to batchGrams = gramsPerMeal × mealsCount', () => {
+  it('migrates the previous gap-fill shape by re-adding foods in order', () => {
     storage.setItem(
       'furlogic_batch_draft',
       JSON.stringify({
         mealsCount: 4,
+        mealTargetOverride: 400,
+        inputMode: 'perMeal',
         items: [
-          { food: { id: 1, name: '雞胸' }, role: 'main', gramsPerMeal: 0 },
-          { food: { id: 3, name: '南瓜' }, role: 'fixed', gramsPerMeal: 12.3 },
-          // 兩者皆有時以 batchGrams 為準
           {
-            food: { id: 2, name: '鯖魚' },
+            food: { id: 1, name: '雞胸', type: 'protein' },
+            role: 'main',
+            batchGrams: 0,
+          },
+          {
+            food: { id: 3, name: '南瓜', type: 'veg' },
+            role: 'fixed',
+            gramsPerMeal: 12.3,
+          },
+          {
+            food: { id: 2, name: '鴨柳', type: 'protein' },
             role: 'variant',
-            gramsPerMeal: 65,
+            batchGrams: 100,
+          },
+          {
+            food: { id: 5, name: '白飯', type: 'starch' },
+            role: 'fixed',
             batchGrams: 100,
           },
         ],
@@ -129,12 +143,13 @@ describe('batch draft', () => {
     );
     expect(getBatchDraft()).toEqual({
       mealsCount: 4,
-      mealTargetOverride: null,
-      inputMode: 'batch',
+      mealTargetOverride: 400,
+      categoryPct: { protein: 60, produce: 30, starch: 10 },
       items: [
-        { food: { id: 1, name: '雞胸' }, role: 'main', batchGrams: 0 },
-        { food: { id: 3, name: '南瓜' }, role: 'fixed', batchGrams: 49.2 },
-        { food: { id: 2, name: '鯖魚' }, role: 'variant', batchGrams: 100 },
+        { food: { id: 1, name: '雞胸', type: 'protein' }, pct: 30 },
+        { food: { id: 3, name: '南瓜', type: 'veg' }, pct: 30 },
+        { food: { id: 2, name: '鴨柳', type: 'protein' }, pct: 30 },
+        { food: { id: 5, name: '白飯', type: 'starch' }, pct: 10 },
       ],
     });
   });
@@ -145,6 +160,14 @@ describe('batch draft', () => {
       JSON.stringify({
         servings: 4,
         vegWeightPct: 25,
+        items: [{ food: { id: 1, name: '雞胸' }, grams: 1000 }],
+      }),
+    );
+    expect(getBatchDraft()).toBeNull();
+    storage.setItem(
+      'furlogic_batch_draft',
+      JSON.stringify({
+        mealsCount: 2,
         items: [{ food: { id: 1, name: '雞胸' }, grams: 1000 }],
       }),
     );

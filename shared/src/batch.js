@@ -1,24 +1,17 @@
 /**
- * 批次製作「缺口填補」計算(護腸鮮食熱量精算),前後端共用純函式。
- * 營養值皆為每 100g 生食基準;gramsPerMeal 為每餐生重。
+ * 「計算」頁比例計算(護腸鮮食熱量精算),前後端共用純函式。
+ * 營養值皆為每 100g 生食基準;克數為生重。
  *
- * 每餐 = 固定班底(fixed)+ 替換肉類(variant)+ 主力瘦肉(main):
- *   Gap = 單餐目標 − Σ固定 − Σ替換;主力克數 = Gap ÷ (主力 kcal/100g ÷ 100),
- *   無條件進位到整數 g。採買總量 = 每餐克數 × 餐數。
+ * 使用者給每項食材「占每餐總重的百分比」(全部合計 100%),由單餐目標熱量反推:
+ *   熱量密度 density = Σ (pct/100) × (kcal/100g ÷ 100)
+ *   每餐總重 W = 單餐目標 ÷ density;每項每餐克數 = W × pct/100;共買 = 每餐 × 餐數。
  *
- * 蔬菜(type 'veg')不計熱量:熱量、蛋白質、脂肪一律視為 0(鈣、磷與重量照算)。
+ * 蔬菜(type 'veg')不計熱量:熱量、蛋白質、脂肪一律視為 0(鈣、磷與重量照算);
+ * 水果(type 'fruit')照計熱量。
  * 每餐上限(蔬菜 50 g / 內臟 12 g / 高脂魚 65 g)超過只回傳警告,不強制修正。
  */
 import { DEFAULT_MEALS_PER_DAY, MEAL_CAPS } from './nutritionConstants.js';
 import { analyzeMeal, computeIntake, dailyStatus } from './mealLog.js';
-
-/** 食材在缺口填補中的角色 */
-export const ITEM_ROLES = ['fixed', 'variant', 'main'];
-export const ITEM_ROLE_LABELS = {
-  fixed: '固定班底',
-  variant: '替換肉類',
-  main: '主力瘦肉',
-};
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
@@ -27,9 +20,6 @@ const toMealsCount = (n) => {
   const v = typeof n === 'number' ? n : Number(n);
   return Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
 };
-
-/** 克數正規化:非有限正數 → 0 */
-const validGrams = (g) => (Number.isFinite(g) && g > 0 ? g : 0);
 
 /** 是否為「不計熱量」的蔬菜 */
 export const isVegetable = (food) => food?.type === 'veg';
@@ -50,136 +40,169 @@ export const capKindOf = (food) => {
   return sub === 'organ' || sub === 'fatty_fish' ? sub : null;
 };
 
-/** 加入批次時的預設每餐克數:有上限類別者給上限值,其餘 0 */
-export const defaultGramsPerMeal = (food) =>
-  MEAL_CAPS[capKindOf(food)]?.grams ?? 0;
-
 /** 每餐熱量貢獻(未四捨五入);calories 非有限數視為 0 */
 const kcalOf = (food, grams) =>
   ((Number.isFinite(food?.calories) ? food.calories : 0) * grams) / 100;
 
+/** 比例計算的食材類別(顯示順序) */
+export const RATIO_CATEGORIES = ['protein', 'produce', 'starch', 'other'];
+export const RATIO_CATEGORY_LABELS = {
+  protein: '蛋白質',
+  produce: '蔬果',
+  starch: '澱粉',
+  other: '其他',
+};
+/** 各類別預設占比(%);實際使用時依目前出現的類別等比正規化 */
+export const DEFAULT_CATEGORY_PCT = {
+  protein: 60,
+  produce: 30,
+  starch: 10,
+  other: 0,
+};
+
+/** 食材所屬比例類別:protein → 蛋白質;veg / fruit → 蔬果;starch → 澱粉;其他 → 其他 */
+export const ratioCategoryOf = (food) => {
+  const type = food?.type;
+  if (type === 'protein') return 'protein';
+  if (type === 'veg' || type === 'fruit') return 'produce';
+  if (type === 'starch') return 'starch';
+  return 'other';
+};
+
 /**
- * 缺口填補:固定班底 + 替換肉類 → 缺口 → 主力瘦肉克數 → 採買總量。
+ * 目前出現的類別的預設占比:取 DEFAULT_CATEGORY_PCT 後等比正規化到合計 100
+ * (整數,無條件捨去後的餘數補到第一個類別);預設值合計為 0(例如只有 other)時,
+ * 第一個類別給 100。回傳 key 依 RATIO_CATEGORIES 順序,非法類別忽略。
+ * @param {string[]} categories
+ * @returns {Record<string, number>}
+ */
+export const defaultCategoryPcts = (categories = []) => {
+  const list = Array.isArray(categories) ? categories : [];
+  const present = RATIO_CATEGORIES.filter((c) => list.includes(c));
+  if (present.length === 0) return {};
+  const sum = present.reduce((s, c) => s + DEFAULT_CATEGORY_PCT[c], 0);
+  const out = {};
+  if (sum <= 0) {
+    present.forEach((c, i) => {
+      out[c] = i === 0 ? 100 : 0;
+    });
+    return out;
+  }
+  present.forEach((c) => {
+    out[c] = Math.floor((DEFAULT_CATEGORY_PCT[c] / sum) * 100);
+  });
+  const assigned = present.reduce((s, c) => s + out[c], 0);
+  out[present[0]] += 100 - assigned;
+  return out;
+};
+
+/**
+ * 把 total 平均分成 n 份:每份一位小數、加總 = total
+ * (以 0.1 為單位計算,餘數補到第一份)。n 非正整數 → []。
+ */
+export const splitEvenly = (total, n) => {
+  const count = Number.isFinite(n) ? Math.floor(n) : 0;
+  if (count <= 0) return [];
+  const tenths = Math.round((Number.isFinite(total) ? total : 0) * 10);
+  const base = Math.floor(tenths / count);
+  const rem = tenths - base * count;
+  return Array.from({ length: count }, (_, i) =>
+    i === 0 ? (base + rem) / 10 : base / 10,
+  );
+};
+
+/** 比例正規化:非有限數或負數 → 0 */
+const validPct = (p) => (Number.isFinite(p) && p > 0 ? p : 0);
+
+/** 比例合計與 100 的容許誤差(%) */
+const PCT_TOLERANCE = 0.05;
+
+/**
+ * 比例計算:依各食材占每餐總重的 %,由單餐目標熱量反推每餐總重與各項克數。
  *
- * 取位原則(與舊 planBatch 一致):kcal 整數、g 一位小數、總重整數;
- * 主力克數為整數(無條件進位)。所有判定(缺口、達標)皆以未四捨五入的值計算。
+ * 取位:每餐 / 共買克數一位小數、kcal 整數、每餐總重整數;判定以未四捨五入值計算。
  *
  * @param {object} args
- * @param {Array<object>} args.items
- *   `[{ ...food(每 100g 營養值, type, subtype, recipeRole), role, gramsPerMeal }]`
- *   role 為 'fixed' | 'variant' | 'main'(非法值視為 'fixed');
- *   'main' 最多一個,多的視為 'variant';主力的 gramsPerMeal 輸入值忽略,由缺口反推。
- * @param {number} args.mealTarget 單餐目標 kcal(未四捨五入);≤ 0 或非有限數 → 缺口視為 0
+ * @param {Array<object>} args.items `[{ ...food(每 100g 營養值, type, subtype), pct }]`
+ * @param {number} args.mealTarget 單餐目標 kcal
  * @param {number} [args.mealsCount] 製作餐數(整數 ≥ 1,非法 → 1)
  * @param {number} [args.mealsPerDay] 每日餐數,預設 2(算約可吃幾天)
+ * @returns {object} `{ ok, errors, mealsCount, mealTarget, totalGramsPerMeal, items,
+ *   perMeal, batch, status, daysCovered, capWarnings }`;
+ *   errors 的 kind:'total_not_100'(附 totalPct)| 'no_target' | 'no_energy'。
+ *   ok 為 false 時 totalGramsPerMeal / items / perMeal / batch / status 為 null。
  */
-export const planGapFill = ({
+export const planByRatio = ({
   items = [],
   mealTarget = 0,
   mealsCount = 1,
   mealsPerDay = DEFAULT_MEALS_PER_DAY,
 } = {}) => {
-  const list = Array.isArray(items) ? items : [];
+  const list = (Array.isArray(items) ? items : []).filter(Boolean);
   const n = toMealsCount(mealsCount);
   const perDay =
     Number.isFinite(mealsPerDay) && mealsPerDay > 0
       ? mealsPerDay
       : DEFAULT_MEALS_PER_DAY;
-  const hasTarget = Number.isFinite(mealTarget) && mealTarget > 0;
-  const target = hasTarget ? mealTarget : 0;
+  const daysCovered = round1(n / perDay);
 
-  const warnings = [];
-  if (!hasTarget) warnings.push({ kind: 'no_target' });
-
-  // 1. 角色正規化:第一個 main 當主力,其餘 main 降為 variant
-  let mainIdx = -1;
-  let multipleMain = false;
-  const normalized = list.map((item, i) => {
-    const raw = item?.role;
-    const role = ITEM_ROLES.includes(raw) ? raw : 'fixed';
-    if (role !== 'main') return { ...item, role };
-    if (mainIdx === -1) {
-      mainIdx = i;
-      return { ...item, role: 'main' };
-    }
-    multipleMain = true;
-    return { ...item, role: 'variant' };
-  });
-  if (multipleMain) warnings.push({ kind: 'multiple_main' });
-
-  // 2. 熱量計算用的版本:蔬菜熱量 / 蛋白質 / 脂肪歸零
+  const normalized = list.map((item) => ({ ...item, pct: validPct(item.pct) }));
   const energy = withoutVegetableEnergy(normalized);
 
-  // 3. 固定 / 替換熱量(未四捨五入)與缺口
-  const inputGrams = normalized.map((item, i) =>
-    i === mainIdx ? 0 : round1(validGrams(item.gramsPerMeal)),
+  const totalPct = normalized.reduce((s, item) => s + item.pct, 0);
+  const density = energy.reduce(
+    (s, food) => s + (food.pct / 100) * (kcalOf(food, 100) / 100),
+    0,
   );
-  const sumKcal = (role) =>
-    energy.reduce(
-      (sum, food, i) =>
-        food.role === role ? sum + kcalOf(food, inputGrams[i]) : sum,
-      0,
-    );
-  const fixedKcalRaw = sumKcal('fixed');
-  const variantKcalRaw = sumKcal('variant');
-  const gapKcalRaw = target - fixedKcalRaw - variantKcalRaw;
 
-  // 4. 主力瘦肉克數:Gap ÷ (kcal/100g ÷ 100),無條件進位到整數 g。
-  //    先把商取到 1e-6 再 ceil,避免浮點誤差把剛好整數的結果多進一位。
-  let mainGrams = 0;
-  if (mainIdx === -1) {
-    warnings.push({ kind: 'no_main' });
-  } else {
-    const mainFood = energy[mainIdx];
-    const kcalPer100 = Number.isFinite(mainFood.calories)
-      ? mainFood.calories
-      : 0;
-    if (kcalPer100 <= 0) {
-      warnings.push({ kind: 'main_no_energy' });
-    } else if (hasTarget && gapKcalRaw <= 0) {
-      warnings.push({
-        kind: 'over_target',
-        excessKcal: Math.round(Math.abs(gapKcalRaw)), // abs 避免 -0
-      });
-    } else if (hasTarget) {
-      const quotient = gapKcalRaw / (kcalPer100 / 100);
-      mainGrams = Math.ceil(Math.round(quotient * 1e6) / 1e6);
-    }
+  const errors = [];
+  if (Math.abs(totalPct - 100) > PCT_TOLERANCE) {
+    errors.push({ kind: 'total_not_100', totalPct: round1(totalPct) });
+  }
+  if (!(Number.isFinite(mealTarget) && mealTarget > 0)) {
+    errors.push({ kind: 'no_target' });
+  }
+  if (!(density > 0)) errors.push({ kind: 'no_energy' });
+
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      errors,
+      mealsCount: n,
+      mealTarget,
+      totalGramsPerMeal: null,
+      items: null,
+      perMeal: null,
+      batch: null,
+      status: null,
+      daysCovered,
+      capWarnings: [],
+    };
   }
 
-  // 5. 每餐 / 整批食材(順序同輸入)
-  const gramsPerMealOf = (i) => (i === mainIdx ? mainGrams : inputGrams[i]);
-  const mealItems = energy.map((food, i) => ({
-    ...food,
-    grams: gramsPerMealOf(i),
-  }));
-  const batchItems = mealItems.map((food) => ({
-    ...food,
-    grams: food.grams * n,
-  }));
+  // 每餐總重(未四捨五入)
+  const W = mealTarget / density;
 
   const outItems = normalized.map((item, i) => {
-    const gramsPerMeal = gramsPerMealOf(i);
+    const gramsPerMeal = round1((W * item.pct) / 100);
     return {
       ...item,
       gramsPerMeal,
       kcalPerMeal: Math.round(kcalOf(energy[i], gramsPerMeal)),
       batchGrams: round1(gramsPerMeal * n),
-      isMain: i === mainIdx,
     };
   });
 
-  const main =
-    mainIdx === -1
-      ? null
-      : {
-          id: normalized[mainIdx].id,
-          name: normalized[mainIdx].name,
-          gramsPerMeal: mainGrams,
-          kcalPerMeal: Math.round(kcalOf(energy[mainIdx], mainGrams)),
-        };
+  const mealItems = energy.map((food, i) => ({
+    ...food,
+    grams: outItems[i].gramsPerMeal,
+  }));
+  const batchItems = energy.map((food, i) => ({
+    ...food,
+    grams: outItems[i].batchGrams,
+  }));
 
-  // 6. 每餐上限:按類別彙總每餐克數(含反推後的主力),超過才警告
+  // 每餐上限:按類別彙總每餐克數,超過才警告
   const capTotals = {};
   mealItems.forEach((food) => {
     const kind = capKindOf(food);
@@ -192,23 +215,19 @@ export const planGapFill = ({
     return grams > cap ? [{ kind, grams: round1(grams), cap, label }] : [];
   });
 
-  // 7. 營養分析與達標
   const perMealIntake = computeIntake(mealItems);
 
   return {
+    ok: true,
+    errors: [],
     mealsCount: n,
     mealTarget,
+    totalGramsPerMeal: Math.round(W),
     items: outItems,
-    fixedKcal: Math.round(fixedKcalRaw),
-    variantKcal: Math.round(variantKcalRaw),
-    gapKcal: Math.round(gapKcalRaw),
-    main,
     perMeal: analyzeMeal(mealItems),
-    perMealGrams: Math.round(perMealIntake.grams),
     batch: analyzeMeal(batchItems),
     status: dailyStatus(perMealIntake.calories, mealTarget),
-    daysCovered: round1(n / perDay),
+    daysCovered,
     capWarnings,
-    warnings,
   };
 };
