@@ -88,3 +88,14 @@ export const deleteFood = (id, opts) =>
 /** → { draft, confidence, cached } */
 export const lookupFood = (query, opts) =>
   apiFetch('/foods/lookup', { ...opts, method: 'POST', body: { query } });
+
+// === AI 復盤 ===
+/** → { configured, model, dailyUsd, dailyLimitUsd, monthlyUsd, monthlyLimitUsd } */
+export const getAiStatus = (opts) => apiFetch('/ai/status', opts);
+/**
+ * payload 見 utils/review.js buildReviewPayload(只能送規格欄位,未知欄位回 400)
+ * → { review: { verdict, summary, checks, suggestions }, model, costUsd, usage }
+ * 錯誤 code:ai_unavailable(503)/ ai_quota_exceeded(429)/ ai_failed(502)/ 一般 429 頻率限制
+ */
+export const reviewCalc = (payload, opts) =>
+  apiFetch('/ai/review', { ...opts, method: 'POST', body: payload });

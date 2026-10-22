@@ -7,11 +7,13 @@ import { NavProvider, useNav } from './context/NavContext';
 import { PetProvider, usePet } from './context/PetContext';
 import BatchPage from './pages/BatchPage';
 import FoodsPage from './pages/FoodsPage';
+import ReviewPage from './pages/ReviewPage';
 import SettingsPage from './pages/SettingsPage';
 
 const PAGES = {
   batch: BatchPage,
   foods: FoodsPage,
+  review: ReviewPage,
 };
 
 export default function FurLogicApp() {

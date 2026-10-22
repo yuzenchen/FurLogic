@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calculator, Info, Minus, Plus, Trash2, Utensils } from 'lucide-react';
+import {
+  Calculator,
+  Info,
+  Minus,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+  Utensils,
+} from 'lucide-react';
 import {
   DAILY_STATUS_LABELS,
   DEFAULT_MEALS_PER_DAY,
@@ -20,6 +29,7 @@ import {
   StatusBadge,
   cx,
 } from '../components/ui';
+import { useNav } from '../context/NavContext';
 import { usePet } from '../context/PetContext';
 import useBatchDraft from '../hooks/useBatchDraft';
 import {
@@ -31,6 +41,8 @@ import {
   toPct,
   toRatioItems,
 } from '../utils/batchDraft';
+import { buildReviewPayload } from '../utils/review';
+import { saveLastCalc } from '../utils/storage';
 
 const ICON_BUTTON = cx(
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed',
@@ -66,12 +78,27 @@ const ERROR_TEXT = {
 };
 
 /** 計算:設定各類別與各食材占每餐總重的 %,按「計算」後依單餐目標算出每餐克數(不存伺服器) */
+// 切換分頁時 BatchPage 會卸載;計算結果與收合狀態暫存在模組層級,
+// 回到「計算」分頁時還原(重新整理頁面才清掉)。
+const viewCache = { calc: null, collapsed: false };
+
 export default function BatchPage() {
-  const { metrics } = usePet();
+  const { pet, metrics } = usePet();
+  const { startReview } = useNav();
   const draft = useBatchDraft();
   const { items, mealsCount, mealTargetOverride, categoryPct } = draft;
   const [searchOpen, setSearchOpen] = useState(false);
-  const [calc, setCalc] = useState(null); // { signature, result }
+  const [calc, setCalcState] = useState(() => viewCache.calc); // { signature, result, lastCalc }
+  // 計算成功後收合輸入卡,只留摘要卡 + 結果;「編輯比例」/ 清空 / 重新整理後展開
+  const [collapsed, setCollapsedState] = useState(() => viewCache.collapsed);
+  const setCalc = (next) => {
+    viewCache.calc = next;
+    setCalcState(next);
+  };
+  const setCollapsed = (next) => {
+    viewCache.collapsed = next;
+    setCollapsedState(next);
+  };
   const resultRef = useRef(null);
   const clearConfirm = useTwoStepConfirm();
 
@@ -130,28 +157,61 @@ export default function BatchPage() {
 
   const handleCalculate = () => {
     if (blocker) return;
-    setCalc({
-      signature,
-      result: planByRatio({
-        items: toRatioItems(items),
-        mealTarget: mealTargetRaw,
-        mealsCount,
-        mealsPerDay,
-      }),
+    const result = planByRatio({
+      items: toRatioItems(items),
+      mealTarget: mealTargetRaw,
+      mealsCount,
+      mealsPerDay,
     });
+    // 成功就存成「最近一次計算」給 AI 復盤用
+    const payload = buildReviewPayload({
+      pet,
+      mealTarget: mealTargetRaw,
+      mealsCount,
+      mealsPerDay,
+      result,
+    });
+    const lastCalc = payload
+      ? { ...payload, computedAt: new Date().toISOString() }
+      : null;
+    if (lastCalc) saveLastCalc(lastCalc);
+    setCalc({ signature, result, lastCalc });
+    setCollapsed(result.ok);
   };
 
-  // 按下「計算」後把結果捲進畫面(結果在按鈕下方,手機上常在可視範圍外)
+  // 收合中結果變 stale(例如毛孩設定改了目標)→ 自動展開讓使用者看到輸入
+  useEffect(() => {
+    if (stale && collapsed) setCollapsed(false);
+  }, [stale, collapsed]);
+
+  // 按下「計算」後只捲動 <main>(外層是 overflow-hidden 的 100dvh 容器,
+  // 用 scrollIntoView 會連外層一起捲,把頂部列推出畫面)。
+  // 成功時輸入已收合,捲到最上方即可看到摘要卡 + 結果卡;失敗時捲到錯誤訊息。
   useEffect(() => {
     if (!calc) return;
+    const el = resultRef.current;
+    const main = el?.closest('main');
+    if (!main) return;
     const reduce = window.matchMedia?.(
       '(prefers-reduced-motion: reduce)',
     ).matches;
-    resultRef.current?.scrollIntoView({
+    const top = calc.result.ok
+      ? 0
+      : main.scrollTop +
+        el.getBoundingClientRect().top -
+        main.getBoundingClientRect().top -
+        8;
+    main.scrollTo({
+      top: Math.max(0, top),
       behavior: reduce ? 'auto' : 'smooth',
-      block: 'start',
     });
   }, [calc]);
+
+  const handleReview = () => {
+    if (!calc?.lastCalc) return;
+    saveLastCalc(calc.lastCalc);
+    startReview();
+  };
 
   const handleClear = () => {
     if (!clearConfirm.confirming) {
@@ -161,6 +221,7 @@ export default function BatchPage() {
     clearConfirm.reset();
     draft.clear();
     setCalc(null);
+    setCollapsed(false);
   };
 
   return (
@@ -186,105 +247,120 @@ export default function BatchPage() {
         營養數值為生食基準,請輸入下鍋前的生重
       </p>
 
-      <MealTargetCard
-        petMealTarget={petMealTarget}
-        mealsPerDay={mealsPerDay}
-        override={mealTargetOverride}
-        hasTarget={hasTarget}
-        onChange={draft.setMealTargetOverride}
-      />
-
-      <Card
-        as="section"
-        aria-labelledby="ratio-title"
-        padding="px-4 pt-4 pb-4"
-        className="mb-4"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="ratio-title" className="font-semibold text-stone-900">
-            食材比例
-          </h2>
-          {hasItems && (
-            <span
-              className={cx(
-                'shrink-0 text-sm tabular-nums',
-                offBy(categoryTotal, 100)
-                  ? 'text-rose-700'
-                  : 'text-emerald-700',
-              )}
-            >
-              合計 {fmt1(categoryTotal)}%
-            </span>
-          )}
-        </div>
-        {hasItems ? (
-          <>
-            <div className="mt-2">
-              {groups.map((group, i) => (
-                <CategoryBlock
-                  key={group.cat}
-                  group={group}
-                  first={i === 0}
-                  onSetCategoryPct={draft.setCategoryPct}
-                  onSetItemPct={draft.setItemPct}
-                  onSplit={draft.splitCategory}
-                  onRemove={draft.removeFood}
-                />
-              ))}
-            </div>
-            <Button
-              variant="secondary"
-              icon={Plus}
-              block
-              className="mt-3"
-              onClick={() => setSearchOpen(true)}
-            >
-              加入食材
-            </Button>
-          </>
-        ) : (
-          <EmptyState
-            icon={Utensils}
-            title="還沒加入食材"
-            action={
-              <Button icon={Plus} onClick={() => setSearchOpen(true)}>
-                加入食材
-              </Button>
-            }
-          />
-        )}
-      </Card>
-
-      {hasItems && (
-        <MealsCountCard
+      {collapsed ? (
+        <CalcSummaryCard
+          groups={groups}
+          mealTarget={Math.round(mealTargetRaw)}
           mealsCount={mealsCount}
-          mealsPerDay={mealsPerDay}
-          daysCovered={daysCoveredOf(mealsCount, mealsPerDay)}
-          onChange={draft.setMealsCount}
+          onEdit={() => setCollapsed(false)}
         />
+      ) : (
+        <>
+          <MealTargetCard
+            petMealTarget={petMealTarget}
+            mealsPerDay={mealsPerDay}
+            override={mealTargetOverride}
+            hasTarget={hasTarget}
+            onChange={draft.setMealTargetOverride}
+          />
+
+          <Card
+            as="section"
+            aria-labelledby="ratio-title"
+            padding="px-4 pt-4 pb-4"
+            className="mb-4"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="ratio-title" className="font-semibold text-stone-900">
+                食材比例
+              </h2>
+              {hasItems && (
+                <span
+                  className={cx(
+                    'shrink-0 text-sm tabular-nums',
+                    offBy(categoryTotal, 100)
+                      ? 'text-rose-700'
+                      : 'text-emerald-700',
+                  )}
+                >
+                  合計 {fmt1(categoryTotal)}%
+                </span>
+              )}
+            </div>
+            {hasItems ? (
+              <>
+                <div className="mt-2">
+                  {groups.map((group, i) => (
+                    <CategoryBlock
+                      key={group.cat}
+                      group={group}
+                      first={i === 0}
+                      onSetCategoryPct={draft.setCategoryPct}
+                      onSetItemPct={draft.setItemPct}
+                      onSplit={draft.splitCategory}
+                      onRemove={draft.removeFood}
+                    />
+                  ))}
+                </div>
+                <Button
+                  variant="secondary"
+                  icon={Plus}
+                  block
+                  className="mt-3"
+                  onClick={() => setSearchOpen(true)}
+                >
+                  加入食材
+                </Button>
+              </>
+            ) : (
+              <EmptyState
+                icon={Utensils}
+                title="還沒加入食材"
+                action={
+                  <Button icon={Plus} onClick={() => setSearchOpen(true)}>
+                    加入食材
+                  </Button>
+                }
+              />
+            )}
+          </Card>
+
+          {hasItems && (
+            <MealsCountCard
+              mealsCount={mealsCount}
+              mealsPerDay={mealsPerDay}
+              daysCovered={daysCoveredOf(mealsCount, mealsPerDay)}
+              onChange={draft.setMealsCount}
+            />
+          )}
+
+          <div className="mb-4">
+            <Button
+              icon={Calculator}
+              size="lg"
+              block
+              disabled={blocker !== null}
+              aria-describedby={blocker ? 'calc-blocker' : undefined}
+              onClick={handleCalculate}
+            >
+              計算
+            </Button>
+            {blocker && (
+              <p id="calc-blocker" className="mt-2 text-xs text-stone-600">
+                {blocker}
+              </p>
+            )}
+          </div>
+        </>
       )}
 
-      <div className="mb-4">
-        <Button
-          icon={Calculator}
-          size="lg"
-          block
-          disabled={blocker !== null}
-          aria-describedby={blocker ? 'calc-blocker' : undefined}
-          onClick={handleCalculate}
-        >
-          計算
-        </Button>
-        {blocker && (
-          <p id="calc-blocker" className="mt-2 text-xs text-stone-600">
-            {blocker}
-          </p>
-        )}
-      </div>
-
       {calc && (
-        <div ref={resultRef} className="scroll-mt-20">
-          <ResultSection result={calc.result} stale={stale} />
+        <div ref={resultRef}>
+          <ResultSection
+            result={calc.result}
+            stale={stale}
+            onReview={calc.lastCalc ? handleReview : undefined}
+          />
         </div>
       )}
 
@@ -417,8 +493,35 @@ function CategoryBlock({
   );
 }
 
+/** 收合後的計算條件摘要:各類別與食材 %、目標與餐數 */
+function CalcSummaryCard({ groups, mealTarget, mealsCount, onEdit }) {
+  return (
+    <Card as="section" aria-label="計算條件" className="mb-4 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-stone-900">計算條件</h2>
+        <Button variant="secondary" icon={Pencil} onClick={onEdit}>
+          編輯比例
+        </Button>
+      </div>
+      <div className="space-y-1 text-sm text-stone-700 tabular-nums">
+        {groups.map((g) => (
+          <p key={g.cat} className="break-words">
+            {g.label} {fmt1(g.pct)}% —{' '}
+            {g.items
+              .map((item) => `${item.food.name} ${fmt1(item.pct)}%`)
+              .join('、')}
+          </p>
+        ))}
+        <p>
+          目標 {mealTarget} kcal · {mealsCount} 餐
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 /** 計算結果 + 每餐營養 */
-function ResultSection({ result, stale }) {
+function ResultSection({ result, stale, onReview }) {
   if (!result.ok) {
     return (
       <Card as="section" aria-label="計算結果" className="mb-4 space-y-1">
@@ -432,7 +535,12 @@ function ResultSection({ result, stale }) {
   }
   return (
     <>
-      <ResultCard result={result} stale={stale} className="mb-4" />
+      <ResultCard
+        result={result}
+        stale={stale}
+        onReview={onReview}
+        className="mb-4"
+      />
       <div className="mb-4">
         <MealAnalysisCard
           title="每餐營養"
@@ -445,7 +553,7 @@ function ResultSection({ result, stale }) {
 }
 
 /** 計算結果卡:每餐總重、熱量與各項克數(依類別分組) */
-function ResultCard({ result, stale, className }) {
+function ResultCard({ result, stale, onReview, className }) {
   const { perMeal, status, totalGramsPerMeal, items, capWarnings } = result;
   const target = Math.round(result.mealTarget);
   const groups = RATIO_CATEGORIES.map((cat) => {
@@ -520,6 +628,11 @@ function ResultCard({ result, stale, className }) {
             </li>
           ))}
         </ul>
+      )}
+      {onReview && (
+        <Button variant="secondary" icon={Sparkles} block onClick={onReview}>
+          AI 復盤
+        </Button>
       )}
     </Card>
   );
@@ -596,7 +709,7 @@ function MealTargetCard({
       </div>
       {!hasTarget && (
         <p className="text-xs text-amber-700">
-          請先在「毛孩」設定體重,或輸入本次目標
+          請先點右上角毛孩檔案設定體重,或輸入本次目標
         </p>
       )}
     </Card>

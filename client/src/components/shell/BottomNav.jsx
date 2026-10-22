@@ -1,5 +1,5 @@
 import React from 'react';
-import { Apple, ChefHat, PawPrint } from 'lucide-react';
+import { Apple, ChefHat, Sparkles } from 'lucide-react';
 import { FOCUS_RING, cx } from '../ui';
 import { useNav } from '../../context/NavContext';
 
@@ -22,9 +22,9 @@ function NavItem({ icon: Icon, label, selected, onClick }) {
   );
 }
 
-/** 底部導覽:食材 / 計算(突起主按鈕)/ 毛孩 */
+/** 底部導覽:食材 / 計算(突起主按鈕)/ AI 復盤(毛孩設定只從頂部膠囊進入) */
 export default function BottomNav() {
-  const { tab, setTab, openSettings } = useNav();
+  const { tab, setTab } = useNav();
   const batchSelected = tab === 'batch';
 
   return (
@@ -61,10 +61,10 @@ export default function BottomNav() {
           </span>
         </button>
         <NavItem
-          icon={PawPrint}
-          label="毛孩"
-          selected={false}
-          onClick={openSettings}
+          icon={Sparkles}
+          label="AI 復盤"
+          selected={tab === 'review'}
+          onClick={() => setTab('review')}
         />
       </div>
     </nav>

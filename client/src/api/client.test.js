@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, deleteFood, getPets, listFoods, updatePet } from './client';
+import {
+  ApiError,
+  deleteFood,
+  getAiStatus,
+  getPets,
+  listFoods,
+  reviewCalc,
+  updatePet,
+} from './client';
 
 const mockFetch = (impl) => {
   const fn = vi.fn(impl);
@@ -59,5 +67,43 @@ describe('api client', () => {
       code: 'network_error',
       message: '連不上伺服器',
     });
+  });
+});
+describe('ai api', () => {
+  it('GETs /api/ai/status', async () => {
+    const status = {
+      configured: true,
+      model: 'm',
+      dailyUsd: 0.01,
+      dailyLimitUsd: 1,
+      monthlyUsd: 0.1,
+      monthlyLimitUsd: 10,
+    };
+    const fetchFn = mockFetch(async () => jsonResponse(200, status));
+    await expect(getAiStatus()).resolves.toEqual(status);
+    expect(fetchFn.mock.calls[0][0]).toBe('/api/ai/status');
+    expect(fetchFn.mock.calls[0][1].method).toBe('GET');
+  });
+
+  it('POSTs the payload to /api/ai/review', async () => {
+    const body = { review: { verdict: 'pass' }, model: 'm', costUsd: 0.002 };
+    const fetchFn = mockFetch(async () => jsonResponse(200, body));
+    await expect(reviewCalc({ mealTarget: 450 })).resolves.toEqual(body);
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('/api/ai/review');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ mealTarget: 450 });
+  });
+
+  it.each([
+    [503, 'ai_unavailable'],
+    [429, 'ai_quota_exceeded'],
+    [502, 'ai_failed'],
+    [429, 'rate_limited'],
+  ])('surfaces %i %s as ApiError', async (status, code) => {
+    mockFetch(async () => jsonResponse(status, { error: code, message: 'x' }));
+    const err = await reviewCalc({}).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status, code, message: 'x' });
   });
 });

@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { openDatabase } from './db/connection.js';
 import { runMigrations } from './db/migrate.js';
 import { seedDatabase } from './db/seed.js';
+import aiRoutes from './routes/ai.js';
 import foodRoutes from './routes/foods.js';
 import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
@@ -17,6 +18,7 @@ const API_ROUTES = [
   foodRoutes,
   lookupRoutes, // POST /api/foods/lookup(限流 10 req/min/IP)
   importRoutes,
+  aiRoutes, // GET /api/ai/status、POST /api/ai/review(限流 5 req/min/IP)
 ];
 
 const CODE_BY_STATUS = {
@@ -56,15 +58,17 @@ const toErrorResponse = (err) => {
 
 /**
  * 建立 Fastify app(尚未 listen)。
- * fetch 可注入(測試用,避免打外部 API)。
+ * fetch / createAnthropicClient 可注入(測試用,避免打外部 API)。
  * @param {{ dbPath?: string, config?: object, logger?: boolean|object,
- *           fetch?: typeof fetch }} opts
+ *           fetch?: typeof fetch,
+ *           createAnthropicClient?: (apiKey: string) => object }} opts
  */
 export async function buildApp({
   dbPath = ':memory:',
   config = loadConfig(),
   logger = false,
   fetch = globalThis.fetch,
+  createAnthropicClient,
 } = {}) {
   const app = Fastify({
     logger,
@@ -91,7 +95,7 @@ export async function buildApp({
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
 
-  // 只有明確設定 config.rateLimit 的 route 會被限流(lookup)。
+  // 只有明確設定 config.rateLimit 的 route 會被限流(lookup、ai/review)。
   await app.register(rateLimit, {
     global: false,
     errorResponseBuilder: (request, context) => ({
@@ -116,7 +120,9 @@ export async function buildApp({
 
   await app.register(
     async (api) => {
-      for (const routes of API_ROUTES) await api.register(routes, { fetch });
+      for (const routes of API_ROUTES) {
+        await api.register(routes, { fetch, createAnthropicClient });
+      }
     },
     { prefix: '/api' },
   );

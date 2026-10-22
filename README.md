@@ -80,9 +80,16 @@ docker buildx build --platform linux/arm64 -f Dockerfile.api .
 | `GEMINI_API_KEY`  | Gemini API 金鑰                          | 空白                                          |
 | `USDA_API_KEY`    | USDA FoodData Central 金鑰               | 空白                                          |
 | `GEMINI_MODEL`    | Gemini 模型名稱                          | `gemini-2.5-flash`                            |
+| `ANTHROPIC_API_KEY` | Anthropic API 金鑰(AI 復盤用,只放 .env) | 空白                                        |
+| `AI_MODEL`        | AI 復盤使用的 Claude 模型                | `claude-opus-5-5`                             |
+| `AI_DAILY_USD`    | AI 復盤每日花費上限(USD,台北時間日界)  | `1`                                           |
+| `AI_MONTHLY_USD`  | AI 復盤每月花費上限(USD,台北時間月界)  | `10`                                          |
 | `VITE_API_URL`    | 前端 build 時使用的 API 位址(build-time) | 空白 = 同源 `/api`                            |
 
 未設定 `GEMINI_API_KEY` / `USDA_API_KEY` 時,線上查詢會回傳 503,App 會退回手動輸入。
+
+AI 復盤(`POST /api/ai/review`,由 Claude 獨立重算比例計算結果並檢查營養)需要設定 `ANTHROPIC_API_KEY`;
+未設定時回傳 503。每次呼叫的 token 用量與成本記錄在 `ai_usage` 表,日 / 月額度用完回傳 429。
 
 - USDA 金鑰申請:https://fdc.nal.usda.gov/api-key-signup
 - Gemini 金鑰申請:https://aistudio.google.com/apikey

@@ -8,6 +8,8 @@ import { batchDraftReducer, presentCategories } from './batchDraft';
 const KEYS = {
   ACTIVE_TAB: 'furlogic_active_tab',
   BATCH_DRAFT: 'furlogic_batch_draft',
+  LAST_CALC: 'furlogic_last_calc',
+  LAST_REVIEW: 'furlogic_last_review',
   // 已移除的單餐記錄草稿(載入時清掉);以片段組成,方便全域搜尋舊功能殘留
   // 舊版單餐草稿,載入時清除
   LEGACY_SINGLE_DRAFT: 'furlogic_meal_draft',
@@ -57,7 +59,7 @@ const isPlainObject = (v) =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
 // === 目前分頁 ===
-export const TABS = ['batch', 'foods'];
+export const TABS = ['batch', 'foods', 'review'];
 export const DEFAULT_TAB = 'batch';
 /** 舊分頁值 → 新分頁(today/history/log 與更舊的 home/kitchen 都併入計算頁) */
 const LEGACY_TAB_MAP = {
@@ -184,6 +186,105 @@ export const saveBatchDraft = (draft) => {
 };
 
 export const clearBatchDraft = () => removeRaw(KEYS.BATCH_DRAFT);
+
+// === 最近一次計算(AI 復盤用) ===
+const isFiniteNum = (v) => Number.isFinite(v);
+const isNullableStr = (v) => v === null || typeof v === 'string';
+
+const isValidReviewItem = (i) =>
+  isPlainObject(i) &&
+  typeof i.name === 'string' &&
+  isNullableStr(i.type) &&
+  isNullableStr(i.subtype) &&
+  ['calories', 'protein', 'fat', 'ca', 'p', 'pct', 'gramsPerMeal'].every((k) =>
+    isFiniteNum(i[k]),
+  );
+
+const isValidAppResult = (r) =>
+  isPlainObject(r) &&
+  ['totalGramsPerMeal', 'perMealKcal', 'protein', 'fat', 'ca', 'p'].every((k) =>
+    isFiniteNum(r[k]),
+  ) &&
+  (r.caPRatio === null || isFiniteNum(r.caPRatio)) &&
+  Array.isArray(r.capWarnings) &&
+  r.capWarnings.every((w) => typeof w === 'string');
+
+const isValidLastCalc = (c) =>
+  isPlainObject(c) &&
+  typeof c.computedAt === 'string' &&
+  !Number.isNaN(Date.parse(c.computedAt)) &&
+  isPlainObject(c.pet) &&
+  typeof c.pet.name === 'string' &&
+  isFiniteNum(c.pet.weight) &&
+  isFiniteNum(c.mealTarget) &&
+  c.mealTarget > 0 &&
+  Number.isInteger(c.mealsCount) &&
+  Number.isInteger(c.mealsPerDay) &&
+  Array.isArray(c.items) &&
+  c.items.length > 0 &&
+  c.items.every(isValidReviewItem) &&
+  isValidAppResult(c.appResult);
+
+/** 存最近一次計算:payload 為 buildReviewPayload 的結果 + computedAt(ISO 字串) */
+export const saveLastCalc = (payload) => {
+  try {
+    writeRaw(KEYS.LAST_CALC, JSON.stringify(payload));
+  } catch {
+    // JSON 失敗時略過
+  }
+};
+
+/** 讀最近一次計算;不存在或形狀不符回 null */
+export const getLastCalc = () => {
+  const c = readJson(KEYS.LAST_CALC);
+  return isValidLastCalc(c) ? c : null;
+};
+
+// === 最近一次 AI 復盤結果(對應某次計算的 computedAt) ===
+const VERDICTS = ['pass', 'warn', 'fail'];
+
+const isValidReview = (r) =>
+  isPlainObject(r) &&
+  VERDICTS.includes(r.verdict) &&
+  typeof r.summary === 'string' &&
+  Array.isArray(r.checks) &&
+  r.checks.every((c) => isPlainObject(c) && typeof c.label === 'string') &&
+  Array.isArray(r.suggestions);
+
+/** 存 AI 復盤回應:{ computedAt, review, model, costUsd } */
+export const saveLastReview = ({ computedAt, review, model, costUsd }) => {
+  try {
+    writeRaw(
+      KEYS.LAST_REVIEW,
+      JSON.stringify({ computedAt, review, model, costUsd }),
+    );
+  } catch {
+    // JSON 失敗時略過
+  }
+};
+
+/**
+ * 讀 AI 復盤回應;computedAt 與傳入值不同(計算已更新)或形狀不符回 null
+ * @param {string} computedAt 最近一次計算的時間
+ * @returns {{ computedAt: string, review: object, model: string, costUsd: number } | null}
+ */
+export const getLastReview = (computedAt) => {
+  const r = readJson(KEYS.LAST_REVIEW);
+  if (
+    !isPlainObject(r) ||
+    typeof r.computedAt !== 'string' ||
+    r.computedAt !== computedAt ||
+    !isValidReview(r.review)
+  ) {
+    return null;
+  }
+  return {
+    computedAt: r.computedAt,
+    review: r.review,
+    model: typeof r.model === 'string' ? r.model : '',
+    costUsd: Number.isFinite(r.costUsd) ? r.costUsd : 0,
+  };
+};
 
 // === 舊版資料匯入 ===
 const ACTIVITY_LEVELS = ['low', 'normal', 'high'];

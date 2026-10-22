@@ -29,6 +29,12 @@ const parsePort = (value, fallback) => {
 const emptyToNull = (value) =>
   typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 
+/** 金額上限(USD);非數字或負數時用預設值。 */
+const parseUsd = (value, fallback) => {
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+};
+
 export const loadConfig = (env = process.env) => ({
   port: parsePort(env.PORT, 8787),
   host: emptyToNull(env.HOST) ?? '0.0.0.0',
@@ -40,4 +46,11 @@ export const loadConfig = (env = process.env) => ({
   geminiApiKey: emptyToNull(env.GEMINI_API_KEY),
   usdaApiKey: emptyToNull(env.USDA_API_KEY),
   geminiModel: emptyToNull(env.GEMINI_MODEL) ?? 'gemini-2.5-flash',
+  // AI 復盤(Anthropic)。金鑰只從 env 讀,未設定時 /api/ai/review 回 503。
+  ai: {
+    apiKey: emptyToNull(env.ANTHROPIC_API_KEY),
+    model: emptyToNull(env.AI_MODEL) ?? 'claude-opus-5-5',
+    dailyUsd: parseUsd(env.AI_DAILY_USD, 1),
+    monthlyUsd: parseUsd(env.AI_MONTHLY_USD, 10),
+  },
 });

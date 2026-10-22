@@ -3,9 +3,13 @@ import {
   clearLegacyData,
   getActiveTab,
   getBatchDraft,
+  getLastCalc,
+  getLastReview,
   readLegacyPetProfile,
   saveActiveTab,
   saveBatchDraft,
+  saveLastCalc,
+  saveLastReview,
 } from './storage';
 
 const makeStorage = () => {
@@ -45,6 +49,10 @@ describe('active tab', () => {
     expect(getActiveTab()).toBe('foods');
     saveActiveTab('history');
     expect(getActiveTab()).toBe('foods');
+    saveActiveTab('review');
+    expect(getActiveTab()).toBe('review');
+    storage.setItem('furlogic_active_tab', '"review"');
+    expect(getActiveTab()).toBe('review');
   });
 
   it('survives a throwing localStorage', () => {
@@ -211,5 +219,98 @@ describe('legacy profile', () => {
     expect(readLegacyPetProfile()).toBeNull();
     storage.setItem('furlogic_pet_profile', '{"name":"A","weight":0}');
     expect(readLegacyPetProfile()).toBeNull();
+  });
+});
+
+const lastCalc = () => ({
+  pet: { name: 'JOJO', weight: 8 },
+  mealTarget: 450.6,
+  mealsCount: 4,
+  mealsPerDay: 2,
+  items: [
+    {
+      name: '雞胸肉',
+      type: 'protein',
+      subtype: null,
+      calories: 120,
+      protein: 22,
+      fat: 2,
+      ca: 5,
+      p: 200,
+      pct: 100,
+      gramsPerMeal: 375.5,
+    },
+  ],
+  appResult: {
+    totalGramsPerMeal: 376,
+    perMealKcal: 451,
+    protein: 82.6,
+    fat: 7.5,
+    ca: 19,
+    p: 751,
+    caPRatio: 0.03,
+    capWarnings: [],
+  },
+  computedAt: '2026-10-22T08:00:00.000Z',
+});
+
+describe('last calc', () => {
+  it('round-trips a valid payload', () => {
+    expect(getLastCalc()).toBeNull();
+    saveLastCalc(lastCalc());
+    expect(getLastCalc()).toEqual(lastCalc());
+    saveLastCalc({
+      ...lastCalc(),
+      appResult: { ...lastCalc().appResult, caPRatio: null },
+    });
+    expect(getLastCalc().appResult.caPRatio).toBeNull();
+  });
+
+  it('rejects malformed payloads', () => {
+    const c = lastCalc();
+    const bad = [
+      { ...c, computedAt: 'nope' },
+      { ...c, computedAt: undefined },
+      { ...c, mealTarget: 0 },
+      { ...c, mealsCount: 2.5 },
+      { ...c, items: [] },
+      { ...c, items: [{ ...c.items[0], calories: '120' }] },
+      { ...c, pet: null },
+      { ...c, appResult: { ...c.appResult, capWarnings: [1] } },
+      { ...c, appResult: { ...c.appResult, caPRatio: '1.2' } },
+    ];
+    for (const b of bad) {
+      saveLastCalc(b);
+      expect(getLastCalc()).toBeNull();
+    }
+    storage.setItem('furlogic_last_calc', 'not json');
+    expect(getLastCalc()).toBeNull();
+  });
+});
+
+describe('last review', () => {
+  const review = {
+    verdict: 'pass',
+    summary: 'ok',
+    checks: [{ label: '每餐總重', expected: '376', actual: '376', ok: true }],
+    suggestions: [],
+  };
+
+  it('returns the review only for the matching computedAt', () => {
+    saveLastReview({ computedAt: 'a', review, model: 'm', costUsd: 0.002 });
+    expect(getLastReview('a')).toEqual({
+      computedAt: 'a',
+      review,
+      model: 'm',
+      costUsd: 0.002,
+    });
+    expect(getLastReview('b')).toBeNull();
+  });
+
+  it('rejects malformed reviews', () => {
+    saveLastReview({ computedAt: 'a', review: { ...review, verdict: 'meh' } });
+    expect(getLastReview('a')).toBeNull();
+    storage.setItem('furlogic_last_review', '[]');
+    expect(getLastReview('a')).toBeNull();
   });
 });

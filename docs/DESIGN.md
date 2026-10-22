@@ -37,13 +37,14 @@
 ## App 外殼
 
 - 頂部列(白底、底線 `stone-200`,高 56px):左 `Logo`(32px,沿用現有元件與動畫)+「FurLogic」;右側毛孩膠囊按鈕(名字 + Settings 圖示)→ 設定頁(全頁,左上返回)。
-- 底部導覽固定,3 格等寬:`食材(Apple)` **`計算`** `毛孩(PawPrint)`。
+- 底部導覽固定,3 格等寬:`食材(Apple)` **`計算`** `AI 復盤(Sparkles)`。
   - 中央「計算」為突起主按鈕:直徑 56px 圓形 `bg-orange-700 text-white`,`-mt-6` 浮出,`ring-4 ring-cream`,圖示 `ChefHat`,下方文字「計算」(分頁值仍為 `batch`)。
   - 其餘分頁:圖示 22px + 11px 文字;選中 `text-orange-700` 且有 `aria-current="page"`,未選 `stone-600`。
-  - 「毛孩」開啟設定頁(與頂部入口相同)。
+  - 「AI 復盤」切到分頁 `review`(選中規則同「食材」)。毛孩設定**只**從頂部毛孩膠囊進入。
 - 內容區底部留出導覽高度 + safe-area。
-- 目前分頁存 localStorage(`furlogic_active_tab`)。分頁值:`batch`(預設)| `foods`。舊值 `today` / `history` / `log` / `home` / `kitchen` 讀取時轉成 `batch`,`search` 轉成 `foods`。
-- 導覽狀態用 `NavContext`(`useNav()` → `{ tab, setTab, openSettings }`)。
+- 目前分頁存 localStorage(`furlogic_active_tab`)。分頁值:`batch`(預設)| `foods` | `review`。舊值 `today` / `history` / `log` / `home` / `kitchen` 讀取時轉成 `batch`,`search` 轉成 `foods`。
+- 導覽狀態用 `NavContext`(`useNav()` → `{ tab, setTab, openSettings, closeSettings, settingsOpen, pendingReview, startReview, clearPendingReview }`)。`startReview()` 設記憶體旗標 `pendingReview` 並切到 `review`,ReviewPage 讀到後自動開始一次並清掉(不用 sessionStorage,重新整理不會再自動觸發)。
+- **捲動規則**:可捲動的只有 `<main>`(外層是 `h-[100dvh] overflow-hidden`)。程式捲動一律呼叫 `main.scrollTo(...)`(依 `getBoundingClientRect` 差值算位置,尊重 `prefers-reduced-motion`),**不要用 `scrollIntoView`**——它會連外層容器一起捲,把頂部列推出畫面。
 - 舊版資料匯入提示(`LegacyImportBanner`)顯示在計算分頁頂端。
 
 ## 頁面
@@ -92,14 +93,30 @@
      - 底部 footer 主按鈕(block、lg):「加入 {n} 項」(0 項時「加入食材」並 disabled);按下依勾選順序逐一加入草稿後關閉。線上查詢 / 手動新增儲存後直接加入並關閉抽屜(已勾選項先一併加入)。
 5. 「餐數」卡(有食材時):步進器 − [N] +(1–60,按鈕 44px,`aria-label="減少 1 餐"/"增加 1 餐"`,輸入框 `aria-label="餐數"`)+「餐」;「約可吃 {daysCovered} 天(每日 {mealsPerDay} 餐)」。
 6. 主按鈕「計算」(`Calculator`、primary、block、lg)。停用條件依序:無食材、任一類別食材合計 ≠ 類別 %、類別合計 ≠ 100、無目標;停用時按鈕下方 `text-xs stone-600` 說明第一個未滿足的條件。
-7. 按下後把 `planByRatio` 結果與當下輸入簽章(JSON 字串:各項 % / 類別 % / 目標 / 餐數 / 每日餐數)存在元件 state;輸入改變後結果卡頂部顯示 amber-700「比例或目標已變更,請重新計算」,數字仍為舊結果。重新整理或清空後不保留結果。`ok: false` 時顯示 rose-700 錯誤文字。
-8. 「計算結果」卡(唯一視覺重點,白卡 + `orange-50` 內層面板):大字「每餐 {totalGramsPerMeal} g」(`text-4xl font-bold tabular-nums`)、下一行「{每餐 kcal} kcal / 目標 {目標} kcal」+ `StatusBadge`(90–110% 規則);面板下依類別分組,組標題「{類別} {Σg} g」,每項 `{name}` 右側粗體 `{gramsPerMeal} g`、下方小字「{pct}% · 共買 {batchGrams} g」。有 `capWarnings` 時卡底 amber-700 條列「{label}每餐建議 ≤ {cap} g,目前 {grams} g」。
-9. `MealAnalysisCard`「每餐營養」(`result={perMeal}`、`batchSupplements={batch.supplements}`):統計、鈣磷比量表、巨量營養素;建議補充中克數類(蛋殼粉)顯示「共買需加 X・每餐 Y」,按顆計的魚油只顯示「每餐 1 顆」。
+7. **收合**:按「計算」且 `result.ok` → 第 3–6 項(單餐目標卡、食材比例卡、餐數卡、計算按鈕)整組換成「計算條件」摘要卡(`Card`,`aria-label="計算條件"`):第一行 `text-sm font-semibold stone-900`「計算條件」+ 右側 secondary「編輯比例」(Pencil);內容 `text-sm stone-700 tabular-nums`,每類一行「{類別} {類別%}% — {食材名 %、…}」,最後一行「目標 {kcal} kcal · {餐數} 餐」。「編輯比例」、清空、重新整理、或結果變 stale(例如毛孩設定改了目標)時展開。計算成功後 `<main>` 捲到最上方(摘要卡 + 結果卡自然在視野內);失敗時捲到錯誤訊息。每次成功都把本次計算存成「最近一次計算」(見 AI 復盤)。
+8. 按下後把 `planByRatio` 結果與當下輸入簽章(JSON 字串:各項 % / 類別 % / 目標 / 餐數 / 每日餐數)存在元件 state;輸入改變後結果卡頂部顯示 amber-700「比例或目標已變更,請重新計算」,數字仍為舊結果。重新整理或清空後不保留結果。`ok: false` 時顯示 rose-700 錯誤文字。
+9. 「計算結果」卡(唯一視覺重點,白卡 + `orange-50` 內層面板):大字「每餐 {totalGramsPerMeal} g」(`text-4xl font-bold tabular-nums`)、下一行「{每餐 kcal} kcal / 目標 {目標} kcal」+ `StatusBadge`(90–110% 規則);面板下依類別分組,組標題「{類別} {Σg} g」,每項 `{name}` 右側粗體 `{gramsPerMeal} g`、下方小字「{pct}% · 共買 {batchGrams} g」。有 `capWarnings` 時卡底 amber-700 條列「{label}每餐建議 ≤ {cap} g,目前 {grams} g」。卡片最底 secondary block「AI 復盤」(Sparkles):重新寫入最近一次計算 → `startReview()`。
+10. `MealAnalysisCard`「每餐營養」(`result={perMeal}`、`batchSupplements={batch.supplements}`):統計、鈣磷比量表、巨量營養素;建議補充中克數類(蛋殼粉)顯示「共買需加 X・每餐 Y」,按顆計的魚油只顯示「每餐 1 顆」。
 
 ### 食材 `pages/FoodsPage.jsx`(分頁 `foods`)
 
 搜尋、篩選、自訂食材新增/編輯/刪除。卡片「加入計算」把食材加入計算頁草稿並切到 `batch` 分頁。`FoodSearchSheet`(計算頁的複選抽屜,底部「加入 N 項」)/ `FoodFormSheet` 在 `context="batch"` 時「儲存並加入」會把新食材連同已勾選項加入計算頁草稿並關閉抽屜(有毒食材只存入食材庫)。
 
+### AI 復盤 `pages/ReviewPage.jsx`(分頁 `review`)
+
+請 AI 重新驗算最近一次計算並檢查營養是否合理(API:`GET /api/ai/status`、`POST /api/ai/review`)。
+
+- **最近一次計算** 存 localStorage `furlogic_last_calc`(`saveLastCalc` / `getLastCalc`,壞資料回 null):`utils/review.js` 的 `buildReviewPayload({ pet, mealTarget, mealsCount, mealsPerDay, result })` + `computedAt`(ISO)。每次按「計算」且 ok 就存。送出前以 `toReviewBody` 拿掉 `computedAt`——後端對未知欄位回 400,payload 只能有 `pet{name,weight}`、`mealTarget`(未四捨五入,> 0)、`mealsCount`、`mealsPerDay`(整數 1–4)、`items[{name(≤ 40 字),type,subtype,calories,protein,fat,ca,p,pct,gramsPerMeal}]`、`appResult{totalGramsPerMeal,perMealKcal,protein,fat,ca,p,caPRatio(數字或 null),capWarnings[字串]}`;數值缺漏補 0,毛孩名 1–30 字(空則「毛孩」)。
+- **最近一次復盤** 存 `furlogic_last_review`(`{ computedAt, review, model, costUsd }`);computedAt 與最近一次計算不同就不顯示。結果也存在元件 state。
+- UI(由上到下):
+  1. `PageHeader`「AI 復盤」/「請 AI 重新驗算計算結果並檢查營養是否合理」。
+  2. 無最近一次計算:`EmptyState`(Sparkles)「還沒有計算結果」+ 主按鈕「去計算」(切到 `batch`)。
+  3. 「最近一次計算」卡:`text-xs stone-600` 計算時間(`zh-TW` 本地格式);「每餐 {g} g · {kcal} kcal / 目標 {目標} kcal · {餐數} 餐」;每項「{name} {pct}% → {gramsPerMeal} g」。
+  4. 主按鈕「請 AI 復盤」(Sparkles、block、lg;進行中 spinner +「AI 驗算中…」並停用)。`configured=false` 時停用,下方 amber-700「尚未設定 AI 金鑰（ANTHROPIC_API_KEY）」;`text-xs stone-600`「今日用量 $x / $limit」。
+  5. 結果卡:大徽章 pass emerald「計算正確」(Check)/ warn amber「計算正確，有營養建議」(AlertCircle)/ fail rose「計算有誤」(X);summary 段落;「逐項檢查」每項 ok 圖示(Check emerald / X rose)+ 粗體 label + `text-xs`「預期 {expected} · App {actual}」+ note(stone-600);「建議」條列(有才顯示);底部 `text-xs stone-500`「模型 {model} · 本次 $0.0000」。
+  6. 錯誤:`ai_unavailable` → 同金鑰提示;`ai_quota_exceeded` → rose「AI 額度已用完（{message}）」;其他(含 `ai_failed`、一般 429 頻率限制)→ rose「AI 復盤失敗：{message}」+ ghost「重試」。
+- 從計算頁「AI 復盤」進來(`pendingReview`)且已設定金鑰 → 自動開始一次;同一個 computedAt 只自動觸發一次。
+
 ### 毛孩檔案 `pages/SettingsPage.jsx`
 
-由頂部膠囊或底部「毛孩」開啟。單餐目標 = DER ÷ 每日餐數,計算頁以此(或本次覆寫值)換算每餐總重與各項克數。
+只由頂部毛孩膠囊開啟。單餐目標 = DER ÷ 每日餐數,計算頁以此(或本次覆寫值)換算每餐總重與各項克數。
